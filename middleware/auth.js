@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
-const { users } = require("../data/store");
+const pool = require("../db/pool");
 
-const authMiddleware = (req, res, next) => {
+const authMiddleware = async (req, res, next) => {
   const authHeader = req.get("Authorization");
   if (!authHeader) {
     return res.status(401).json({ message: "Authorization header missing" });
@@ -27,12 +27,22 @@ const authMiddleware = (req, res, next) => {
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    const user = users.find((candidate) => candidate.id === decoded.userId);
+    const sessionResult = await pool.query(
+      "SELECT id FROM sessions WHERE token = $1 AND expires_at > now()",
+      [token],
+    );
+    if (sessionResult.rows.length === 0) {
+      return res.status(401).json({ message: "Session has expired or been logged out" });
+    }
+
+    const result = await pool.query("SELECT id, role FROM users WHERE id = $1", [decoded.userId]);
+    const user = result.rows[0];
     if (!user) {
       return res.status(401).json({ message: "User no longer exists" });
     }
 
     req.user = { userId: user.id, role: user.role };
+    req.token = token;
     next();
   } catch (error) {
     return res.status(401).json({ message: "Invalid token" });
