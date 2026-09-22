@@ -1,6 +1,7 @@
 require("dotenv").config();
 const bcrypt = require("bcrypt");
 const { sequelize, User } = require("../models");
+const logger = require("../utils/logger");
 
 const [name, email, password] = process.argv.slice(2);
 
@@ -25,7 +26,7 @@ const createAdmin = async () => {
     role: "admin",
   });
 
-  console.log("Admin account created:", {
+  logger.info("Admin account created:", {
     id: admin.id,
     name: admin.name,
     email: admin.email,
@@ -36,6 +37,6 @@ const createAdmin = async () => {
 createAdmin()
   .then(() => process.exit(0))
   .catch((error) => {
-    console.error("Failed to create admin:", error.message);
+    logger.error("Failed to create admin:", error.message);
     process.exit(1);
   });
