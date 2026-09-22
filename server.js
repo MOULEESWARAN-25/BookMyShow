@@ -4,6 +4,7 @@ require("dotenv").config();
 
 const { sequelize } = require("./models");
 const logger = require("./utils/logger");
+const winstonLogger = require("./utils/winstonLogger");
 const requestLogger = require("./middleware/requestLogger");
 const authRoutes = require("./routes/auth");
 const bookingRoutes = require("./routes/booking");
@@ -21,6 +22,7 @@ app.use("/api/shows", showRoutes);
 
 app.use((err, req, res, next) => {
   logger.error(err.stack || err.message);
+  winstonLogger.error(err.stack || err.message);
   res.status(500).json({ message: "Internal server error" });
 });
 
@@ -32,9 +34,11 @@ initDb()
   .then(() => {
     app.listen(3000, () => {
       logger.info("Server is running on port 3000");
+      winstonLogger.info("Server is running on port 3000");
     });
   })
   .catch((error) => {
     logger.error("Failed to initialize database:", error.message);
+    winstonLogger.error(`Failed to initialize database: ${error.message}`);
     process.exit(1);
   });
