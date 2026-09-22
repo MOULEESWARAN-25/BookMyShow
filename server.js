@@ -23,7 +23,6 @@ app.use((err, req, res, next) => {
 
 const initDb = async () => {
   await sequelize.authenticate();
-  await sequelize.sync();
 };
 
 initDb()
