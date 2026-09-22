@@ -1,6 +1,7 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const pool = require("../db/pool");
+const { Op } = require("sequelize");
+const { User, Session } = require("../models");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
@@ -16,25 +17,25 @@ const signup = async (req, res) => {
   }
 
   if (!EMAIL_REGEX.test(email)) {
-    return res.status(400).json({ message: "Please provide a valid email address" });
+    return res
+      .status(400)
+      .json({ message: "Please provide a valid email address" });
   }
 
   if (!PASSWORD_REGEX.test(password)) {
     return res.status(400).json({
-      message: "Password must be at least 8 characters long and contain at least one letter and one number",
+      message:
+        "Password must be at least 8 characters long and contain at least one letter and one number",
     });
   }
 
-  const existingUser = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
-  if (existingUser.rows.length > 0) {
+  const existingUser = await User.findOne({ where: { email } });
+  if (existingUser) {
     return res.status(409).json({ message: "User already exists" });
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  await pool.query(
-    "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, 'user')",
-    [name, email, hashedPassword],
-  );
+  await User.create({ name, email, password: hashedPassword, role: "user" });
 
   res.status(201).json({ message: "User created successfully" });
 };
@@ -46,9 +47,9 @@ const login = async (req, res) => {
     return res.status(400).json({ message: "Email and password are required" });
   }
 
-  const result = await pool.query("SELECT * FROM users WHERE email = $1", [email]);
-  const user = result.rows[0];
-  const isCorrectPassword = user && (await bcrypt.compare(password, user.password));
+  const user = await User.findOne({ where: { email } });
+  const isCorrectPassword =
+    user && (await bcrypt.compare(password, user.password));
   if (!user || !isCorrectPassword) {
     return res.status(401).json({ message: "Invalid credentials" });
   }
@@ -63,25 +64,21 @@ const login = async (req, res) => {
   );
   const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
-  const activeSessions = await pool.query(
-    "SELECT id FROM sessions WHERE user_id = $1 AND expires_at > now() ORDER BY created_at ASC",
-    [user.id],
-  );
-  if (activeSessions.rows.length >= MAX_ACTIVE_SESSIONS) {
-    const sessionsToEvict = activeSessions.rows.slice(
+  const activeSessions = await Session.findAll({
+    where: { userId: user.id, expiresAt: { [Op.gt]: new Date() } },
+    order: [["createdAt", "ASC"]],
+  });
+  if (activeSessions.length >= MAX_ACTIVE_SESSIONS) {
+    const sessionsToEvict = activeSessions.slice(
       0,
-      activeSessions.rows.length - MAX_ACTIVE_SESSIONS + 1,
+      activeSessions.length - MAX_ACTIVE_SESSIONS + 1,
     );
-    await pool.query(
-      "DELETE FROM sessions WHERE id = ANY($1)",
-      [sessionsToEvict.map((session) => session.id)],
-    );
+    await Session.destroy({
+      where: { id: sessionsToEvict.map((session) => session.id) },
+    });
   }
 
-  await pool.query(
-    "INSERT INTO sessions (user_id, token, expires_at) VALUES ($1, $2, $3)",
-    [user.id, token, expiresAt],
-  );
+  await Session.create({ userId: user.id, token, expiresAt });
 
   res.status(200).json({
     message: "Login successful",
@@ -96,7 +93,7 @@ const login = async (req, res) => {
 };
 
 const logout = async (req, res) => {
-  await pool.query("DELETE FROM sessions WHERE token = $1", [req.token]);
+  await Session.destroy({ where: { token: req.token } });
 
   res.status(200).json({ message: "Logged out successfully" });
 };

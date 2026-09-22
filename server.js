@@ -1,10 +1,8 @@
 const express = require("express");
-const fs = require("fs");
-const path = require("path");
 
 require("dotenv").config();
 
-const pool = require("./db/pool");
+const { sequelize } = require("./models");
 const authRoutes = require("./routes/auth");
 const bookingRoutes = require("./routes/booking");
 const movieRoutes = require("./routes/movie");
@@ -24,11 +22,8 @@ app.use((err, req, res, next) => {
 });
 
 const initDb = async () => {
-  const initSql = fs.readFileSync(
-    path.join(__dirname, "db", "init.sql"),
-    "utf8",
-  );
-  await pool.query(initSql);
+  await sequelize.authenticate();
+  await sequelize.sync();
 };
 
 initDb()

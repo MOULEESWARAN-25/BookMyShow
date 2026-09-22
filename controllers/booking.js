@@ -1,4 +1,5 @@
-const pool = require("../db/pool");
+const { Op } = require("sequelize");
+const { sequelize, Show, Seat, Booking } = require("../models");
 
 const createBooking = async (req, res) => {
   const { showId, seats } = req.body || {};
@@ -22,51 +23,79 @@ const createBooking = async (req, res) => {
     return res.status(400).json({ message: "Duplicate seats are not allowed" });
   }
 
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN");
+    const booking = await sequelize.transaction(async (transaction) => {
+      const show = await Show.findByPk(numericShowId, { transaction });
+      if (!show) {
+        const notFound = new Error("Show not found");
+        notFound.status = 404;
+        throw notFound;
+      }
 
-    const showResult = await client.query("SELECT id FROM shows WHERE id = $1", [numericShowId]);
-    if (!showResult.rows[0]) {
-      await client.query("ROLLBACK");
-      return res.status(404).json({ message: "Show not found" });
-    }
+      const seatRows = await Seat.findAll({
+        where: { showId: numericShowId, seatNumber: { [Op.in]: uniqueSeats } },
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
 
-    const seatsResult = await client.query(
-      "SELECT seat_number AS \"seatNumber\", status FROM seats WHERE show_id = $1 AND seat_number = ANY($2) FOR UPDATE",
-      [numericShowId, uniqueSeats],
-    );
+      const foundSeats = new Map(
+        seatRows.map((seat) => [seat.seatNumber, seat.status]),
+      );
+      const unavailableSeat = uniqueSeats.find(
+        (seatNumber) => !foundSeats.has(seatNumber),
+      );
+      if (unavailableSeat) {
+        const badSeat = new Error(`Seat ${unavailableSeat} does not exist`);
+        badSeat.status = 400;
+        throw badSeat;
+      }
 
-    const foundSeats = new Map(seatsResult.rows.map((seat) => [seat.seatNumber, seat.status]));
-    const unavailableSeat = uniqueSeats.find((seatNumber) => !foundSeats.has(seatNumber));
-    if (unavailableSeat) {
-      await client.query("ROLLBACK");
-      return res.status(400).json({ message: `Seat ${unavailableSeat} does not exist` });
-    }
+      const bookedSeat = uniqueSeats.find(
+        (seatNumber) => foundSeats.get(seatNumber) === "booked",
+      );
+      if (bookedSeat) {
+        const conflict = new Error(`Seat ${bookedSeat} is already booked`);
+        conflict.status = 409;
+        throw conflict;
+      }
 
-    const bookedSeat = uniqueSeats.find((seatNumber) => foundSeats.get(seatNumber) === "booked");
-    if (bookedSeat) {
-      await client.query("ROLLBACK");
-      return res.status(409).json({ message: `Seat ${bookedSeat} is already booked` });
-    }
+      await Seat.update(
+        { status: "booked" },
+        {
+          where: {
+            showId: numericShowId,
+            seatNumber: { [Op.in]: uniqueSeats },
+          },
+          transaction,
+        },
+      );
 
-    await client.query(
-      "UPDATE seats SET status = 'booked' WHERE show_id = $1 AND seat_number = ANY($2)",
-      [numericShowId, uniqueSeats],
-    );
+      return Booking.create(
+        {
+          userId: req.user.userId,
+          showId: numericShowId,
+          seats: uniqueSeats,
+          status: "booked",
+        },
+        { transaction },
+      );
+    });
 
-    const bookingResult = await client.query(
-      "INSERT INTO bookings (user_id, show_id, seats, status) VALUES ($1, $2, $3, $4) RETURNING id, user_id AS \"userId\", show_id AS \"showId\", seats, status",
-      [req.user.userId, numericShowId, uniqueSeats, "booked"],
-    );
-
-    await client.query("COMMIT");
-    res.status(201).json({ message: "Booking created successfully", booking: bookingResult.rows[0] });
+    res.status(201).json({
+      message: "Booking created successfully",
+      booking: {
+        id: booking.id,
+        userId: booking.userId,
+        showId: booking.showId,
+        seats: booking.seats,
+        status: booking.status,
+      },
+    });
   } catch (error) {
-    await client.query("ROLLBACK");
+    if (error.status) {
+      return res.status(error.status).json({ message: error.message });
+    }
     throw error;
-  } finally {
-    client.release();
   }
 };
 

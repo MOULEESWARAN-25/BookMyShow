@@ -1,6 +1,6 @@
 require("dotenv").config();
 const bcrypt = require("bcrypt");
-const pool = require("./pool");
+const { sequelize, User } = require("../models");
 
 const [name, email, password] = process.argv.slice(2);
 
@@ -10,18 +10,27 @@ if (!name || !email || !password) {
 }
 
 const createAdmin = async () => {
-  const existing = await pool.query("SELECT id FROM users WHERE email = $1", [email]);
-  if (existing.rows.length > 0) {
+  await sequelize.sync();
+
+  const existing = await User.findOne({ where: { email } });
+  if (existing) {
     throw new Error(`A user with email ${email} already exists`);
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
-  const result = await pool.query(
-    "INSERT INTO users (name, email, password, role) VALUES ($1, $2, $3, 'admin') RETURNING id, name, email, role",
-    [name, email, hashedPassword],
-  );
+  const admin = await User.create({
+    name,
+    email,
+    password: hashedPassword,
+    role: "admin",
+  });
 
-  console.log("Admin account created:", result.rows[0]);
+  console.log("Admin account created:", {
+    id: admin.id,
+    name: admin.name,
+    email: admin.email,
+    role: admin.role,
+  });
 };
 
 createAdmin()

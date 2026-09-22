@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const pool = require("../db/pool");
+const { User } = require("../models");
 
 const optionalAuth = async (req, res, next) => {
   const authHeader = req.get("Authorization");
@@ -25,8 +25,7 @@ const optionalAuth = async (req, res, next) => {
       return next();
     }
 
-    const result = await pool.query("SELECT id, role FROM users WHERE id = $1", [decoded.userId]);
-    const user = result.rows[0];
+    const user = await User.findByPk(decoded.userId, { attributes: ["id", "role"] });
     if (user) {
       req.user = { userId: user.id, role: user.role };
     }
