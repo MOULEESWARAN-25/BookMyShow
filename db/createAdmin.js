@@ -1,10 +1,11 @@
 require("dotenv").config();
 const bcrypt = require("bcrypt");
-const { sequelize, User } = require("../models");
+const { User } = require("../models");
 const logger = require("../utils/logger");
 const winstonLogger = require("../utils/winstonLogger");
 
-const [name, email, password] = process.argv.slice(2);
+const [name, rawEmail, password] = process.argv.slice(2);
+const email = rawEmail?.trim().toLowerCase();
 
 if (!name || !email || !password) {
   console.error("Usage: node db/createAdmin.js <name> <email> <password>");
@@ -12,8 +13,6 @@ if (!name || !email || !password) {
 }
 
 const createAdmin = async () => {
-  await sequelize.sync();
-
   const existing = await User.findOne({ where: { email } });
   if (existing) {
     throw new Error(`A user with email ${email} already exists`);

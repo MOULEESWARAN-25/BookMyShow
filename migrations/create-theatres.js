@@ -2,25 +2,25 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable("sessions", {
+    await queryInterface.createTable("theatres", {
       id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
-      user_id: {
+      admin_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: { model: "users", key: "id" },
-        onDelete: "CASCADE",
       },
-      token: { type: Sequelize.TEXT, allowNull: false, unique: true },
+      name: { type: Sequelize.TEXT, allowNull: false },
+      city: { type: Sequelize.TEXT, allowNull: false },
       created_at: {
         type: Sequelize.DATE,
         allowNull: false,
         defaultValue: Sequelize.fn("now"),
       },
-      expires_at: { type: Sequelize.DATE, allowNull: false },
     });
+    await queryInterface.addIndex("theatres", ["admin_id"]);
   },
 
   down: async (queryInterface) => {
-    await queryInterface.dropTable("sessions");
+    await queryInterface.dropTable("theatres");
   },
 };

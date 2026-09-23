@@ -10,6 +10,7 @@ const authRoutes = require("./routes/auth");
 const bookingRoutes = require("./routes/booking");
 const movieRoutes = require("./routes/movie");
 const showRoutes = require("./routes/show");
+const theatreRoutes = require("./routes/theatre");
 const app = express();
 
 app.use(requestLogger);
@@ -19,8 +20,13 @@ app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/movies", movieRoutes);
 app.use("/api/shows", showRoutes);
+app.use("/api/theatres", theatreRoutes);
 
 app.use((err, req, res, next) => {
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({ message: "Request body must be valid JSON" });
+  }
+
   logger.error(err.stack || err.message);
   winstonLogger.error(err.stack || err.message);
   res.status(500).json({ message: "Internal server error" });

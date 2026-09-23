@@ -1,16 +1,25 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { Op } = require("sequelize");
+const { Op, UniqueConstraintError } = require("sequelize");
 const { User, Session } = require("../models");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 const MAX_ACTIVE_SESSIONS = 3;
 
-const signup = async (req, res) => {
-  const { name, email, password } = req.body || {};
+const normalizeEmail = (email) =>
+  typeof email === "string" ? email.trim().toLowerCase() : "";
 
-  if (!name || !email || !password) {
+const signup = async (req, res) => {
+  const { name, password } = req.body || {};
+  const email = normalizeEmail(req.body?.email);
+
+  if (
+    typeof name !== "string" ||
+    !name.trim() ||
+    !email ||
+    typeof password !== "string"
+  ) {
     return res.status(400).json({
       message: "All the fields are required: name, email, and password",
     });
@@ -29,21 +38,29 @@ const signup = async (req, res) => {
     });
   }
 
-  const existingUser = await User.findOne({ where: { email } });
-  if (existingUser) {
-    return res.status(409).json({ message: "User already exists" });
-  }
-
   const hashedPassword = await bcrypt.hash(password, 10);
-  await User.create({ name, email, password: hashedPassword, role: "user" });
+  try {
+    await User.create({
+      name: name.trim(),
+      email,
+      password: hashedPassword,
+      role: "user",
+    });
+  } catch (error) {
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({ message: "User already exists" });
+    }
+    throw error;
+  }
 
   res.status(201).json({ message: "User created successfully" });
 };
 
 const login = async (req, res) => {
-  const { email, password } = req.body;
+  const { password } = req.body || {};
+  const email = normalizeEmail(req.body?.email);
 
-  if (!email || !password) {
+  if (!email || typeof password !== "string" || !password) {
     return res.status(400).json({ message: "Email and password are required" });
   }
 
