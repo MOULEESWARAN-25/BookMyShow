@@ -31,8 +31,6 @@ const getSeats = async (req, res) => {
   res.status(200).json({ showId, seats });
 };
 
-// Creates one show and its seats. seatRows ["A", "B"] with seatsPerRow 10
-// produces seats A1..A10 and B1..B10.
 const createShow = async (req, res) => {
   const { movieId, theatreId, startsAt, endsAt, price, seatRows, seatsPerRow } =
     req.body || {};

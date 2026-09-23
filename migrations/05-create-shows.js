@@ -28,7 +28,6 @@ module.exports = {
     });
     await queryInterface.addIndex("shows", ["movie_id", "starts_at"]);
 
-    // A theatre has a single hall, so two of its shows must never overlap in time.
     await queryInterface.sequelize.query(
       "CREATE EXTENSION IF NOT EXISTS btree_gist",
     );

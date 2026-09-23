@@ -6,7 +6,6 @@ const parseId = (value) => {
 const isNonEmptyString = (value) =>
   typeof value === "string" && value.trim().length > 0;
 
-// Escapes the LIKE wildcards so user input is matched literally.
 const escapeLike = (value) => value.replace(/[\\%_]/g, "\\$&");
 
 module.exports = {

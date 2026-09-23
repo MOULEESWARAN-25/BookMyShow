@@ -39,7 +39,6 @@ const createBooking = async (req, res) => {
         throw new BookingError(400, "This show has already started");
       }
 
-      // Row locks stop two concurrent requests from booking the same seat.
       const seatRows = await ShowSeat.findAll({
         where: { showId: numericShowId, seatNumber: { [Op.in]: requestedSeats } },
         transaction,

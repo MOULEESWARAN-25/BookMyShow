@@ -15,8 +15,6 @@ const MOVIE_ATTRIBUTES = [
 
 const upcoming = () => ({ startsAt: { [Op.gt]: new Date() } });
 
-// Lists movies that have at least one upcoming show, optionally filtered by
-// movie title (?search=) or by the name of a theatre running it (?theatre=).
 const listMovies = async (req, res) => {
   const { search, theatre } = req.query;
 
@@ -84,7 +82,6 @@ const getMovie = async (req, res) => {
   res.status(200).json({ movie, theatres });
 };
 
-// Upcoming shows for a movie, optionally limited to one theatre (?theatreId=).
 const listShows = async (req, res) => {
   const movieId = parseId(req.params.movieId);
   if (!movieId) {
