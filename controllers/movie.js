@@ -1,15 +1,56 @@
-const { sequelize, Movie, Show, Seat } = require("../models");
+const { Op } = require("sequelize");
+const { Movie, Show, Theatre } = require("../models");
+const { parseId, isNonEmptyString, escapeLike } = require("../utils/validation");
 
-const parseId = (value) => {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
-};
+const MOVIE_ATTRIBUTES = [
+  "id",
+  "title",
+  "description",
+  "language",
+  "genre",
+  "durationMinutes",
+  "releaseDate",
+  "castMembers",
+];
 
+const upcoming = () => ({ startsAt: { [Op.gt]: new Date() } });
+
+// Lists movies that have at least one upcoming show, optionally filtered by
+// movie title (?search=) or by the name of a theatre running it (?theatre=).
 const listMovies = async (req, res) => {
+  const { search, theatre } = req.query;
+
+  const movieWhere = isNonEmptyString(search)
+    ? { title: { [Op.iLike]: `%${escapeLike(search.trim())}%` } }
+    : {};
+  const theatreWhere = isNonEmptyString(theatre)
+    ? { name: { [Op.iLike]: `%${escapeLike(theatre.trim())}%` } }
+    : undefined;
+
   const movies = await Movie.findAll({
-    attributes: ["id", "title", "language", "genre", "duration"],
-    order: [["id", "ASC"]],
+    attributes: MOVIE_ATTRIBUTES,
+    where: movieWhere,
+    include: [
+      {
+        model: Show,
+        attributes: [],
+        required: true,
+        where: upcoming(),
+        include: [
+          {
+            model: Theatre,
+            as: "theatre",
+            attributes: [],
+            required: true,
+            where: theatreWhere,
+          },
+        ],
+      },
+    ],
+    group: ["Movie.id"],
+    order: [["title", "ASC"]],
   });
+
   res.status(200).json({ movies });
 };
 
@@ -21,16 +62,29 @@ const getMovie = async (req, res) => {
       .json({ message: "movieId must be a positive integer" });
   }
 
-  const movie = await Movie.findByPk(movieId, {
-    attributes: ["id", "title", "language", "genre", "duration"],
-  });
+  const movie = await Movie.findByPk(movieId, { attributes: MOVIE_ATTRIBUTES });
   if (!movie) {
     return res.status(404).json({ message: "Movie not found" });
   }
 
-  res.status(200).json({ movie });
+  const theatres = await Theatre.findAll({
+    attributes: ["id", "name", "city"],
+    include: [
+      {
+        model: Show,
+        attributes: [],
+        required: true,
+        where: { movieId, ...upcoming() },
+      },
+    ],
+    group: ["Theatre.id"],
+    order: [["name", "ASC"]],
+  });
+
+  res.status(200).json({ movie, theatres });
 };
 
+// Upcoming shows for a movie, optionally limited to one theatre (?theatreId=).
 const listShows = async (req, res) => {
   const movieId = parseId(req.params.movieId);
   if (!movieId) {
@@ -39,131 +93,97 @@ const listShows = async (req, res) => {
       .json({ message: "movieId must be a positive integer" });
   }
 
-  const movie = await Movie.findByPk(movieId);
+  const where = { movieId, ...upcoming() };
+  if (req.query.theatreId !== undefined) {
+    const theatreId = parseId(req.query.theatreId);
+    if (!theatreId) {
+      return res
+        .status(400)
+        .json({ message: "theatreId must be a positive integer" });
+    }
+    where.theatreId = theatreId;
+  }
+
+  const movie = await Movie.findByPk(movieId, { attributes: ["id"] });
   if (!movie) {
     return res.status(404).json({ message: "Movie not found" });
   }
 
   const shows = await Show.findAll({
-    where: { movieId },
-    attributes: ["id", "time"],
-    order: [["id", "ASC"]],
+    where,
+    attributes: ["id", "startsAt", "endsAt", "price"],
+    include: [
+      { model: Theatre, as: "theatre", attributes: ["id", "name", "city"] },
+    ],
+    order: [["startsAt", "ASC"]],
   });
+
   res.status(200).json({ shows });
 };
 
-const getSeats = async (req, res) => {
-  const showId = parseId(req.params.showId);
-  if (!showId) {
+const createMovie = async (req, res) => {
+  const {
+    title,
+    description,
+    language,
+    genre,
+    durationMinutes,
+    releaseDate,
+    castMembers,
+  } = req.body || {};
+
+  if (![title, language, genre].every(isNonEmptyString)) {
     return res
       .status(400)
-      .json({ message: "showId must be a positive integer" });
+      .json({ message: "title, language, and genre are required" });
   }
 
-  const show = await Show.findByPk(showId);
-  if (!show) {
-    return res.status(404).json({ message: "Show not found" });
+  if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
+    return res
+      .status(400)
+      .json({ message: "durationMinutes must be a positive integer" });
   }
 
-  const seats = await Seat.findAll({
-    where: { showId },
-    attributes: [["seat_number", "seatNumber"], "status"],
-    order: [["seatNumber", "ASC"]],
-  });
-  res.status(200).json({ showId, seats });
-};
-
-const createMovie = async (req, res) => {
-  const { title, language, genre, duration, shows } = req.body || {};
-  const requiredTextFields = [title, language, genre, duration];
-  if (
-    requiredTextFields.some(
-      (field) => typeof field !== "string" || !field.trim(),
-    ) ||
-    !Array.isArray(shows) ||
-    shows.length === 0
-  ) {
-    return res.status(400).json({
-      message: "title, language, genre, duration, and shows are required",
-    });
+  if (description !== undefined && typeof description !== "string") {
+    return res.status(400).json({ message: "description must be a string" });
   }
 
   if (
-    shows.some((show) => {
-      const seats = show?.seats;
-      const seatNumbers = Array.isArray(seats)
-        ? seats.map((seat) => seat?.seatNumber)
-        : [];
-      return (
-        !show ||
-        typeof show.time !== "string" ||
-        !show.time.trim() ||
-        !Array.isArray(seats) ||
-        seats.length === 0 ||
-        seatNumbers.some(
-          (seatNumber) => typeof seatNumber !== "string" || !seatNumber.trim(),
-        ) ||
-        new Set(seatNumbers).size !== seatNumbers.length ||
-        seats.some((seat) => !["available", "booked"].includes(seat.status))
-      );
-    })
+    releaseDate !== undefined &&
+    (typeof releaseDate !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(releaseDate) ||
+      Number.isNaN(Date.parse(releaseDate)))
   ) {
-    return res.status(400).json({
-      message:
-        "Each show needs a time and valid unique seats with available or booked status",
-    });
+    return res
+      .status(400)
+      .json({ message: "releaseDate must be a date in YYYY-MM-DD format" });
   }
 
-  const result = await sequelize.transaction(async (transaction) => {
-    const movie = await Movie.create(
-      {
-        title: title.trim(),
-        language: language.trim(),
-        genre: genre.trim(),
-        duration: duration.trim(),
-      },
-      { transaction },
-    );
+  if (
+    castMembers !== undefined &&
+    (!Array.isArray(castMembers) || !castMembers.every(isNonEmptyString))
+  ) {
+    return res
+      .status(400)
+      .json({ message: "castMembers must be an array of names" });
+  }
 
-    const createdShows = [];
-    for (const show of shows) {
-      const createdShow = await Show.create(
-        { movieId: movie.id, time: show.time.trim() },
-        { transaction },
-      );
-
-      const createdSeats = [];
-      for (const seat of show.seats) {
-        const createdSeat = await Seat.create(
-          {
-            showId: createdShow.id,
-            seatNumber: seat.seatNumber.trim(),
-            status: seat.status,
-          },
-          { transaction },
-        );
-        createdSeats.push({
-          seatNumber: createdSeat.seatNumber,
-          status: createdSeat.status,
-        });
-      }
-
-      createdShows.push({ id: createdShow.id, time: createdShow.time, seats: createdSeats });
-    }
-
-    return {
-      id: movie.id,
-      title: movie.title,
-      language: movie.language,
-      genre: movie.genre,
-      duration: movie.duration,
-      shows: createdShows,
-    };
+  const movie = await Movie.create({
+    title: title.trim(),
+    description: description?.trim() || null,
+    language: language.trim(),
+    genre: genre.trim(),
+    durationMinutes,
+    releaseDate: releaseDate ?? null,
+    castMembers: castMembers?.map((name) => name.trim()) ?? null,
+    createdBy: req.user.userId,
   });
 
   res.status(201).json({
     message: "Movie created successfully",
-    movie: result,
+    movie: Object.fromEntries(
+      MOVIE_ATTRIBUTES.map((attribute) => [attribute, movie[attribute]]),
+    ),
   });
 };
 
@@ -171,6 +191,5 @@ module.exports = {
   listMovies,
   getMovie,
   listShows,
-  getSeats,
   createMovie,
 };

@@ -6,8 +6,27 @@ const Booking = sequelize.define(
   {
     userId: { type: DataTypes.INTEGER, allowNull: false, field: "user_id" },
     showId: { type: DataTypes.INTEGER, allowNull: false, field: "show_id" },
-    seats: { type: DataTypes.ARRAY(DataTypes.TEXT), allowNull: false },
-    status: { type: DataTypes.TEXT, allowNull: false, defaultValue: "booked" },
+    totalAmount: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: false,
+      field: "total_amount",
+      get() {
+        const value = this.getDataValue("totalAmount");
+        return value === null ? null : Number(value);
+      },
+    },
+    status: {
+      type: DataTypes.TEXT,
+      allowNull: false,
+      defaultValue: "confirmed",
+      validate: { isIn: [["confirmed", "cancelled"]] },
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+      field: "created_at",
+    },
   },
   {
     tableName: "bookings",

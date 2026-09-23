@@ -2,16 +2,13 @@
 
 module.exports = {
   up: async (queryInterface, Sequelize) => {
-    await queryInterface.createTable("seats", {
-      id: {
-        type: Sequelize.INTEGER,
-        primaryKey: true,
-        autoIncrement: true,
-      },
+    await queryInterface.createTable("show_seats", {
+      id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
       show_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: { model: "shows", key: "id" },
+        onDelete: "CASCADE",
       },
       seat_number: { type: Sequelize.TEXT, allowNull: false },
       status: {
@@ -20,15 +17,20 @@ module.exports = {
         defaultValue: "available",
       },
     });
-
-    await queryInterface.addConstraint("seats", {
+    await queryInterface.addConstraint("show_seats", {
       fields: ["show_id", "seat_number"],
       type: "unique",
-      name: "seats_show_id_seat_number_key",
+      name: "show_seats_show_id_seat_number_key",
+    });
+    await queryInterface.addConstraint("show_seats", {
+      fields: ["status"],
+      type: "check",
+      where: { status: ["available", "booked"] },
+      name: "show_seats_status_check",
     });
   },
 
   down: async (queryInterface) => {
-    await queryInterface.dropTable("seats");
+    await queryInterface.dropTable("show_seats");
   },
 };

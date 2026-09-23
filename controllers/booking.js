@@ -1,13 +1,20 @@
 const { Op } = require("sequelize");
-const { sequelize, Show, Seat, Booking } = require("../models");
+const { sequelize, Show, ShowSeat, Booking, BookingSeat } = require("../models");
+const { parseId } = require("../utils/validation");
+
+class BookingError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
 
 const createBooking = async (req, res) => {
   const { showId, seats } = req.body || {};
-  const numericShowId = Number(showId);
+  const numericShowId = parseId(showId);
 
   if (
-    !Number.isInteger(numericShowId) ||
-    numericShowId <= 0 ||
+    !numericShowId ||
     !Array.isArray(seats) ||
     seats.length === 0 ||
     seats.some((seat) => typeof seat !== "string" || !seat.trim())
@@ -17,9 +24,8 @@ const createBooking = async (req, res) => {
       .json({ message: "showId and a non-empty seats array are required" });
   }
 
-  const requestedSeats = seats.map((seat) => seat.trim());
-  const uniqueSeats = [...new Set(requestedSeats)];
-  if (uniqueSeats.length !== requestedSeats.length) {
+  const requestedSeats = seats.map((seat) => seat.trim().toUpperCase());
+  if (new Set(requestedSeats).size !== requestedSeats.length) {
     return res.status(400).json({ message: "Duplicate seats are not allowed" });
   }
 
@@ -27,72 +33,67 @@ const createBooking = async (req, res) => {
     const booking = await sequelize.transaction(async (transaction) => {
       const show = await Show.findByPk(numericShowId, { transaction });
       if (!show) {
-        const notFound = new Error("Show not found");
-        notFound.status = 404;
-        throw notFound;
+        throw new BookingError(404, "Show not found");
+      }
+      if (show.startsAt <= new Date()) {
+        throw new BookingError(400, "This show has already started");
       }
 
-      const seatRows = await Seat.findAll({
-        where: { showId: numericShowId, seatNumber: { [Op.in]: uniqueSeats } },
+      // Row locks stop two concurrent requests from booking the same seat.
+      const seatRows = await ShowSeat.findAll({
+        where: { showId: numericShowId, seatNumber: { [Op.in]: requestedSeats } },
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
 
-      const foundSeats = new Map(
-        seatRows.map((seat) => [seat.seatNumber, seat.status]),
-      );
-      const unavailableSeat = uniqueSeats.find(
-        (seatNumber) => !foundSeats.has(seatNumber),
-      );
-      if (unavailableSeat) {
-        const badSeat = new Error(`Seat ${unavailableSeat} does not exist`);
-        badSeat.status = 400;
-        throw badSeat;
+      const seatsByNumber = new Map(seatRows.map((seat) => [seat.seatNumber, seat]));
+      const missingSeat = requestedSeats.find((seat) => !seatsByNumber.has(seat));
+      if (missingSeat) {
+        throw new BookingError(400, `Seat ${missingSeat} does not exist`);
       }
-
-      const bookedSeat = uniqueSeats.find(
-        (seatNumber) => foundSeats.get(seatNumber) === "booked",
-      );
+      const bookedSeat = seatRows.find((seat) => seat.status === "booked");
       if (bookedSeat) {
-        const conflict = new Error(`Seat ${bookedSeat} is already booked`);
-        conflict.status = 409;
-        throw conflict;
+        throw new BookingError(409, `Seat ${bookedSeat.seatNumber} is already booked`);
       }
 
-      await Seat.update(
+      await ShowSeat.update(
         { status: "booked" },
-        {
-          where: {
-            showId: numericShowId,
-            seatNumber: { [Op.in]: uniqueSeats },
-          },
-          transaction,
-        },
+        { where: { id: seatRows.map((seat) => seat.id) }, transaction },
       );
 
-      return Booking.create(
+      const createdBooking = await Booking.create(
         {
           userId: req.user.userId,
           showId: numericShowId,
-          seats: uniqueSeats,
-          status: "booked",
+          totalAmount: (show.price * requestedSeats.length).toFixed(2),
         },
         { transaction },
       );
+
+      await BookingSeat.bulkCreate(
+        seatRows.map((seat) => ({
+          bookingId: createdBooking.id,
+          showSeatId: seat.id,
+        })),
+        { transaction },
+      );
+
+      return createdBooking;
     });
 
     res.status(201).json({
       message: "Booking created successfully",
       booking: {
         id: booking.id,
-        userId: booking.userId,
         showId: booking.showId,
-        seats: booking.seats,
+        seats: requestedSeats,
+        totalAmount: booking.totalAmount,
         status: booking.status,
+        createdAt: booking.createdAt,
       },
     });
   } catch (error) {
-    if (error.status) {
+    if (error instanceof BookingError) {
       return res.status(error.status).json({ message: error.message });
     }
     throw error;
