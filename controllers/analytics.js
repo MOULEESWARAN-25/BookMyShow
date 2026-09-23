@@ -117,7 +117,7 @@ const getSummary = async (req, res) => {
        LEFT JOIN show_bookings sb ON sb.show_id = st.id`,
   );
 
-  res.status(200).json({ summary });
+  res.json({ summary });
 };
 
 const rankBy = (groupSql, selectColumns, orderColumn) => async (req, res) => {
@@ -140,7 +140,7 @@ const rankBy = (groupSql, selectColumns, orderColumn) => async (req, res) => {
     { limit: ranking.limit },
   );
 
-  res.status(200).json({ results });
+  res.json({ results });
 };
 
 const rankMovies = rankBy(
@@ -171,7 +171,7 @@ const getDaily = async (req, res) => {
       ORDER BY 1`,
   );
 
-  res.status(200).json({ days });
+  res.json({ days });
 };
 
 const getShowTimes = async (req, res) => {
@@ -201,7 +201,7 @@ const getShowTimes = async (req, res) => {
     ),
   ]);
 
-  res.status(200).json({ byShowTime, byWeekday });
+  res.json({ byShowTime, byWeekday });
 };
 
 const getGenres = async (req, res) => {
@@ -227,7 +227,7 @@ const getGenres = async (req, res) => {
     groupByMovieColumn("language", "language"),
   ]);
 
-  res.status(200).json({ byGenre, byLanguage });
+  res.json({ byGenre, byLanguage });
 };
 
 module.exports = {
