@@ -7,7 +7,6 @@ const common = {
   host: process.env.PGHOST,
   port: process.env.PGPORT,
   dialect: "postgres",
-  seederStorage: "sequelize",
 };
 
 module.exports = {
