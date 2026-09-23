@@ -6,6 +6,7 @@ const { sequelize } = require("./models");
 const logger = require("./utils/logger");
 const winstonLogger = require("./utils/winstonLogger");
 const requestLogger = require("./middleware/requestLogger");
+const analyticsRoutes = require("./routes/analytics");
 const authRoutes = require("./routes/auth");
 const bookingRoutes = require("./routes/booking");
 const movieRoutes = require("./routes/movie");
@@ -16,6 +17,7 @@ const app = express();
 app.use(requestLogger);
 app.use(express.json());
 
+app.use("/api/analytics", analyticsRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/movies", movieRoutes);
