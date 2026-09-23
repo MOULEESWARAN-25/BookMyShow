@@ -21,30 +21,32 @@ const listMovies = async (req, res) => {
   const movieWhere = isNonEmptyString(search)
     ? { title: { [Op.iLike]: `%${escapeLike(search.trim())}%` } }
     : {};
-  const theatreWhere = isNonEmptyString(theatre)
-    ? { name: { [Op.iLike]: `%${escapeLike(theatre.trim())}%` } }
-    : undefined;
+  const include = isNonEmptyString(theatre)
+    ? [
+        {
+          model: Show,
+          attributes: [],
+          required: true,
+          where: upcoming(),
+          include: [
+            {
+              model: Theatre,
+              as: "theatre",
+              attributes: [],
+              required: true,
+              where: {
+                name: { [Op.iLike]: `%${escapeLike(theatre.trim())}%` },
+              },
+            },
+          ],
+        },
+      ]
+    : [];
 
   const movies = await Movie.findAll({
     attributes: MOVIE_ATTRIBUTES,
     where: movieWhere,
-    include: [
-      {
-        model: Show,
-        attributes: [],
-        required: true,
-        where: upcoming(),
-        include: [
-          {
-            model: Theatre,
-            as: "theatre",
-            attributes: [],
-            required: true,
-            where: theatreWhere,
-          },
-        ],
-      },
-    ],
+    include,
     group: ["Movie.id"],
     order: [["title", "ASC"]],
   });
