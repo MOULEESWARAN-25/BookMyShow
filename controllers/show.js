@@ -1,6 +1,7 @@
 const { ExclusionConstraintError } = require("sequelize");
 const { sequelize, Movie, Show, ShowSeat, Theatre } = require("../models");
 const { parseId } = require("../utils/validation");
+const { showsCacheKey, clearCache } = require("../utils/cache");
 
 const MAX_SEATS_PER_ROW = 50;
 
@@ -126,6 +127,7 @@ const createShow = async (req, res) => {
 
       return createdShow;
     });
+    await clearCache(showsCacheKey(numericMovieId));
 
     res.status(201).json({
       message: "Show created successfully",

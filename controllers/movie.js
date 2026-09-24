@@ -1,6 +1,12 @@
 const { Op } = require("sequelize");
 const { Movie, Show, Theatre } = require("../models");
 const { parseId, isNonEmptyString, escapeLike } = require("../utils/validation");
+const {
+  moviesCacheKey,
+  showsCacheKey,
+  getCached,
+  clearCache,
+} = require("../utils/cache");
 
 const MOVIE_ATTRIBUTES = [
   "id",
@@ -15,9 +21,7 @@ const MOVIE_ATTRIBUTES = [
 
 const upcoming = () => ({ startsAt: { [Op.gt]: new Date() } });
 
-const listMovies = async (req, res) => {
-  const { search, theatre } = req.query;
-
+const findMovies = (search, theatre) => {
   const movieWhere = isNonEmptyString(search)
     ? { title: { [Op.iLike]: `%${escapeLike(search.trim())}%` } }
     : {};
@@ -43,13 +47,23 @@ const listMovies = async (req, res) => {
       ]
     : [];
 
-  const movies = await Movie.findAll({
+  return Movie.findAll({
     attributes: MOVIE_ATTRIBUTES,
     where: movieWhere,
     include,
     group: ["Movie.id"],
     order: [["title", "ASC"]],
   });
+};
+
+// Only the unfiltered list is cached; search results vary too much to be worth it.
+const listMovies = async (req, res) => {
+  const { search, theatre } = req.query;
+
+  const movies =
+    isNonEmptyString(search) || isNonEmptyString(theatre)
+      ? await findMovies(search, theatre)
+      : await getCached(moviesCacheKey(), () => findMovies());
 
   res.status(200).json({ movies });
 };
@@ -92,30 +106,42 @@ const listShows = async (req, res) => {
       .json({ message: "movieId must be a positive integer" });
   }
 
-  const where = { movieId, ...upcoming() };
+  let theatreId = null;
   if (req.query.theatreId !== undefined) {
-    const theatreId = parseId(req.query.theatreId);
+    theatreId = parseId(req.query.theatreId);
     if (!theatreId) {
       return res
         .status(400)
         .json({ message: "theatreId must be a positive integer" });
     }
-    where.theatreId = theatreId;
   }
 
-  const movie = await Movie.findByPk(movieId, { attributes: ["id"] });
-  if (!movie) {
+  const allShows = await getCached(showsCacheKey(movieId), async () => {
+    const movie = await Movie.findByPk(movieId, { attributes: ["id"] });
+    if (!movie) {
+      return null;
+    }
+
+    return Show.findAll({
+      where: { movieId, ...upcoming() },
+      attributes: ["id", "startsAt", "endsAt", "price"],
+      include: [
+        { model: Theatre, as: "theatre", attributes: ["id", "name", "city"] },
+      ],
+      order: [["startsAt", "ASC"]],
+    });
+  });
+  if (!allShows) {
     return res.status(404).json({ message: "Movie not found" });
   }
 
-  const shows = await Show.findAll({
-    where,
-    attributes: ["id", "startsAt", "endsAt", "price"],
-    include: [
-      { model: Theatre, as: "theatre", attributes: ["id", "name", "city"] },
-    ],
-    order: [["startsAt", "ASC"]],
-  });
+  // The cached list can be a few minutes old, so drop shows that have started since.
+  const now = new Date();
+  const shows = allShows.filter(
+    (show) =>
+      new Date(show.startsAt) > now &&
+      (!theatreId || show.theatre.id === theatreId),
+  );
 
   res.status(200).json({ shows });
 };
@@ -177,6 +203,7 @@ const createMovie = async (req, res) => {
     castMembers: castMembers?.map((name) => name.trim()) ?? null,
     createdBy: req.user.userId,
   });
+  await clearCache(moviesCacheKey());
 
   res.status(201).json({
     message: "Movie created successfully",
