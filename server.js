@@ -3,6 +3,7 @@ const express = require("express");
 require("dotenv").config();
 
 const { sequelize } = require("./models");
+const redis = require("./db/redis");
 const logger = require("./utils/logger");
 const winstonLogger = require("./utils/winstonLogger");
 const requestLogger = require("./middleware/requestLogger");
@@ -34,8 +35,13 @@ app.use((err, req, res, next) => {
   res.status(500).json({ message: "Internal server error" });
 });
 
+redis.on("error", (error) => {
+  logger.error("Redis error:", error.message);
+  winstonLogger.error(`Redis error: ${error.message}`);
+});
+
 const initDb = async () => {
-  await sequelize.authenticate();
+  await Promise.all([sequelize.authenticate(), redis.connect()]);
 };
 
 initDb()

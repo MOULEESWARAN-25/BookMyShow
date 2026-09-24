@@ -1,15 +1,11 @@
 const sequelize = require("../db/sequelize");
 const User = require("./user");
-const Session = require("./session");
 const Theatre = require("./theatre");
 const Movie = require("./movie");
 const Show = require("./show");
 const ShowSeat = require("./showSeat");
 const Booking = require("./booking");
 const BookingSeat = require("./bookingSeat");
-
-User.hasMany(Session, { foreignKey: "userId" });
-Session.belongsTo(User, { foreignKey: "userId" });
 
 User.hasMany(Theatre, { foreignKey: "adminId", as: "theatres" });
 Theatre.belongsTo(User, { foreignKey: "adminId", as: "admin" });
@@ -47,7 +43,6 @@ ShowSeat.belongsToMany(Booking, {
 module.exports = {
   sequelize,
   User,
-  Session,
   Theatre,
   Movie,
   Show,

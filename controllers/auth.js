@@ -1,11 +1,19 @@
+const crypto = require("crypto");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { Op, UniqueConstraintError } = require("sequelize");
-const { User, Session } = require("../models");
+const { UniqueConstraintError } = require("sequelize");
+const { User } = require("../models");
+const redis = require("../db/redis");
+const {
+  SESSION_TTL_SECONDS,
+  createSession,
+  deleteSession,
+} = require("../utils/session");
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
-const MAX_ACTIVE_SESSIONS = 3;
+const MAX_FAILED_LOGINS = 5;
+const FAILED_LOGIN_WINDOW_SECONDS = 15 * 60;
 
 const normalizeEmail = (email) =>
   typeof email === "string" ? email.trim().toLowerCase() : "";
@@ -64,12 +72,29 @@ const login = async (req, res) => {
     return res.status(400).json({ message: "Email and password are required" });
   }
 
+  const failedLoginsKey = `failed_logins:${req.ip}:${email}`;
+  const failedLogins = Number(await redis.get(failedLoginsKey));
+  if (failedLogins >= MAX_FAILED_LOGINS) {
+    const retryAfter = await redis.ttl(failedLoginsKey);
+    res.set("Retry-After", String(retryAfter));
+    return res.status(429).json({
+      message: `Too many failed login attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes`,
+    });
+  }
+
   const user = await User.findOne({ where: { email } });
   const isCorrectPassword =
     user && (await bcrypt.compare(password, user.password));
   if (!user || !isCorrectPassword) {
+    await redis
+      .multi()
+      .incr(failedLoginsKey)
+      .expire(failedLoginsKey, FAILED_LOGIN_WINDOW_SECONDS, "NX")
+      .exec();
     return res.status(401).json({ message: "Invalid credentials" });
   }
+
+  await redis.del(failedLoginsKey);
 
   const token = jwt.sign(
     {
@@ -77,25 +102,10 @@ const login = async (req, res) => {
       role: user.role,
     },
     process.env.JWT_SECRET,
-    { expiresIn: "30m" },
+    { expiresIn: SESSION_TTL_SECONDS, jwtid: crypto.randomUUID() },
   );
-  const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
 
-  const activeSessions = await Session.findAll({
-    where: { userId: user.id, expiresAt: { [Op.gt]: new Date() } },
-    order: [["createdAt", "ASC"]],
-  });
-  if (activeSessions.length >= MAX_ACTIVE_SESSIONS) {
-    const sessionsToEvict = activeSessions.slice(
-      0,
-      activeSessions.length - MAX_ACTIVE_SESSIONS + 1,
-    );
-    await Session.destroy({
-      where: { id: sessionsToEvict.map((session) => session.id) },
-    });
-  }
-
-  await Session.create({ userId: user.id, token, expiresAt });
+  await createSession(user.id, token);
 
   res.status(200).json({
     message: "Login successful",
@@ -110,7 +120,7 @@ const login = async (req, res) => {
 };
 
 const logout = async (req, res) => {
-  await Session.destroy({ where: { token: req.token } });
+  await deleteSession(req.user.userId, req.token);
 
   res.status(200).json({ message: "Logged out successfully" });
 };

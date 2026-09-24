@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
-const { Op } = require("sequelize");
-const { User, Session } = require("../models");
+const { User } = require("../models");
+const { getSessionUserId } = require("../utils/session");
 
 const authMiddleware = async (req, res, next) => {
   const authHeader = req.get("Authorization");
@@ -28,10 +28,8 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ message: "Invalid token" });
     }
 
-    const session = await Session.findOne({
-      where: { token, expiresAt: { [Op.gt]: new Date() } },
-    });
-    if (!session) {
+    const sessionUserId = await getSessionUserId(token);
+    if (sessionUserId !== decoded.userId) {
       return res.status(401).json({ message: "Session has expired or been logged out" });
     }
 
