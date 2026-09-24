@@ -1,6 +1,6 @@
 const express = require("express");
 const authMiddleware = require("../middleware/auth");
-const rateLimit = require("../middleware/rateLimit");
+const { rateLimit } = require("../middleware/rateLimit");
 
 const { signup, login, logout } = require("../controllers/auth");
 

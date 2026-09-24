@@ -7,6 +7,7 @@ const redis = require("./db/redis");
 const logger = require("./utils/logger");
 const winstonLogger = require("./utils/winstonLogger");
 const requestLogger = require("./middleware/requestLogger");
+const { rateLimit, byUserOrIp } = require("./middleware/rateLimit");
 const analyticsRoutes = require("./routes/analytics");
 const authRoutes = require("./routes/auth");
 const bookingRoutes = require("./routes/booking");
@@ -16,6 +17,15 @@ const theatreRoutes = require("./routes/theatre");
 const app = express();
 
 app.use(requestLogger);
+app.use(
+  rateLimit({
+    name: "api",
+    max: 10,
+    windowSeconds: 60,
+    message: "Too many requests. Try again in a minute",
+    identify: byUserOrIp,
+  }),
+);
 app.use(express.json());
 
 app.use("/api/analytics", analyticsRoutes);
