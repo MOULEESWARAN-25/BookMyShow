@@ -22,8 +22,9 @@ app.use(
     name: "api",
     max: 10,
     windowSeconds: 60,
-    message: "Too many requests. Try again in a minute",
+    message: "Too many requests. You are blocked for 2 minutes",
     identify: byUserOrIp,
+    blockSeconds: 2 * 60,
   }),
 );
 app.use(express.json());

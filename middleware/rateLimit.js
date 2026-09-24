@@ -18,9 +18,20 @@ const byUserOrIp = (req) => {
 };
 
 const rateLimit =
-  ({ name, max, windowSeconds, message, identify = byIp }) =>
+  ({ name, max, windowSeconds, message, identify = byIp, blockSeconds }) =>
   async (req, res, next) => {
-    const key = `rate:${name}:${identify(req)}`;
+    const id = identify(req);
+    const blockKey = `rate_block:${name}:${id}`;
+
+    if (blockSeconds) {
+      const blockedFor = await redis.ttl(blockKey);
+      if (blockedFor > 0) {
+        res.set("Retry-After", String(blockedFor));
+        return res.status(429).json({ message });
+      }
+    }
+
+    const key = `rate:${name}:${id}`;
     const [count, , ttl] = await redis
       .multi()
       .incr(key)
@@ -29,7 +40,10 @@ const rateLimit =
       .exec();
 
     if (count > max) {
-      res.set("Retry-After", String(ttl));
+      if (blockSeconds) {
+        await redis.multi().set(blockKey, "1", { EX: blockSeconds }).del(key).exec();
+      }
+      res.set("Retry-After", String(blockSeconds || ttl));
       return res.status(429).json({ message });
     }
 
