@@ -20,11 +20,10 @@ app.use(requestLogger);
 app.use(
   rateLimit({
     name: "api",
-    max: 10,
-    windowSeconds: 60,
-    message: "Too many requests. You are blocked for 2 minutes",
+    capacity: 10,
+    refillSeconds: 6,
+    message: "Too many requests. Try again in a few seconds",
     identify: byUserOrIp,
-    blockSeconds: 2 * 60,
   }),
 );
 app.use(express.json());

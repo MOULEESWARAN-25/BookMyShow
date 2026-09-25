@@ -10,8 +10,8 @@ router.post(
   "/signup",
   rateLimit({
     name: "signup",
-    max: 5,
-    windowSeconds: 60 * 60,
+    capacity: 5,
+    refillSeconds: 12 * 60,
     message: "Too many signups from this network. Try again later",
   }),
   signup,
