@@ -1,8 +1,6 @@
 const jwt = require("jsonwebtoken");
 const redis = require("../db/redis");
 
-// Runs inside Redis as one step, so two requests arriving together cannot both spend the last token.
-// Tokens are refilled from the time passed since the last update; leftover time carries over.
 const TAKE_TOKEN_SCRIPT = `
 local capacity = tonumber(ARGV[1])
 local refillMs = tonumber(ARGV[2])
@@ -41,7 +39,6 @@ return { allowed, tokens, retryAfterMs }
 
 const byIp = (req) => `ip:${req.ip}`;
 
-// Runs before authMiddleware, so it reads the JWT itself; an invalid token falls back to the IP.
 const byUserOrIp = (req) => {
   const token = req.get("Authorization")?.match(/^Bearer\s+(\S+)$/i)?.[1];
   if (token) {
