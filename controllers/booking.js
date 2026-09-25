@@ -1,6 +1,8 @@
 const { Op } = require("sequelize");
 const { sequelize, Show, ShowSeat, Booking, BookingSeat } = require("../models");
 const { parseId } = require("../utils/validation");
+const { addTicketEmailJob } = require("../queues/ticketEmail");
+const { logger } = require("../utils/logger");
 
 class BookingError extends Error {
   constructor(status, message) {
@@ -90,6 +92,10 @@ const createBooking = async (req, res) => {
         status: booking.status,
         createdAt: booking.createdAt,
       },
+    });
+
+    addTicketEmailJob(booking.id).catch((error) => {
+      logger.error(`Could not queue ticket email for booking ${booking.id}: ${error.message}`);
     });
   } catch (error) {
     if (error instanceof BookingError) {
