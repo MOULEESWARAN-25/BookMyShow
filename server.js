@@ -4,7 +4,7 @@ require("dotenv").config();
 
 const { sequelize } = require("./models");
 const redis = require("./db/redis");
-const logger = require("./utils/logger");
+const { logger } = require("./utils/logger");
 const requestLogger = require("./middleware/requestLogger");
 const { rateLimit, byUserOrIp } = require("./middleware/rateLimit");
 const analyticsRoutes = require("./routes/analytics");
@@ -41,10 +41,6 @@ app.use((err, req, res, next) => {
 
   logger.error(err.stack || err.message);
   res.status(500).json({ message: "Internal server error" });
-});
-
-redis.on("error", (error) => {
-  logger.error(`Redis error: ${error.message}`);
 });
 
 const initDb = async () => {

@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const redis = require("../db/redis");
+const { redisLogger } = require("../utils/logger");
 
 const TAKE_TOKEN_SCRIPT = `
 local capacity = tonumber(ARGV[1])
@@ -55,8 +56,9 @@ const byUserOrIp = (req) => {
 const rateLimit =
   ({ name, capacity, refillSeconds, message, identify = byIp }) =>
   async (req, res, next) => {
+    const key = `bucket:${name}:${identify(req)}`;
     const [allowed, , retryAfterMs] = await redis.eval(TAKE_TOKEN_SCRIPT, {
-      keys: [`bucket:${name}:${identify(req)}`],
+      keys: [key],
       arguments: [
         String(capacity),
         String(refillSeconds * 1000),
@@ -65,7 +67,11 @@ const rateLimit =
     });
 
     if (!allowed) {
-      res.set("Retry-After", String(Math.ceil(retryAfterMs / 1000)));
+      const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
+      redisLogger.warn(
+        `Rate limit hit ${key} on ${req.method} ${req.originalUrl}, next token in ${retryAfterSeconds}s`,
+      );
+      res.set("Retry-After", String(retryAfterSeconds));
       return res.status(429).json({ message });
     }
 

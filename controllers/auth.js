@@ -4,6 +4,7 @@ const jwt = require("jsonwebtoken");
 const { UniqueConstraintError } = require("sequelize");
 const { User } = require("../models");
 const redis = require("../db/redis");
+const { redisLogger } = require("../utils/logger");
 const {
   SESSION_TTL_SECONDS,
   createSession,
@@ -76,6 +77,9 @@ const login = async (req, res) => {
   const failedLogins = Number(await redis.get(failedLoginsKey));
   if (failedLogins >= MAX_FAILED_LOGINS) {
     const retryAfter = await redis.ttl(failedLoginsKey);
+    redisLogger.warn(
+      `Login blocked for ${email} from ${req.ip}: too many wrong passwords, unlocks in ${retryAfter}s`,
+    );
     res.set("Retry-After", String(retryAfter));
     return res.status(429).json({
       message: `Too many failed login attempts. Try again in ${Math.ceil(retryAfter / 60)} minutes`,
@@ -86,11 +90,14 @@ const login = async (req, res) => {
   const isCorrectPassword =
     user && (await bcrypt.compare(password, user.password));
   if (!user || !isCorrectPassword) {
-    await redis
+    const [attempts] = await redis
       .multi()
       .incr(failedLoginsKey)
       .expire(failedLoginsKey, FAILED_LOGIN_WINDOW_SECONDS, "NX")
       .exec();
+    redisLogger.warn(
+      `Wrong password for ${email} from ${req.ip} (${attempts}/${MAX_FAILED_LOGINS})`,
+    );
     return res.status(401).json({ message: "Invalid credentials" });
   }
 

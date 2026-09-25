@@ -1,7 +1,7 @@
 require("dotenv").config();
 const bcrypt = require("bcrypt");
 const { User } = require("../models");
-const logger = require("../utils/logger");
+const { logger } = require("../utils/logger");
 
 const [name, rawEmail, password] = process.argv.slice(2);
 const email = rawEmail?.trim().toLowerCase();

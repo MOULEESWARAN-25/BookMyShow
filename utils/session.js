@@ -1,4 +1,5 @@
 const redis = require("../db/redis");
+const { redisLogger } = require("./logger");
 
 const SESSION_TTL_SECONDS = 30 * 60;
 const MAX_ACTIVE_SESSIONS = 3;
@@ -14,6 +15,7 @@ const createSession = async (userId, token) => {
   const activeTokens = await redis.zRange(userKey, 0, -1);
 
   const transaction = redis.multi();
+  let evictedCount = 0;
   if (activeTokens.length >= MAX_ACTIVE_SESSIONS) {
     const tokensToEvict = activeTokens.slice(
       0,
@@ -21,6 +23,7 @@ const createSession = async (userId, token) => {
     );
     transaction.del(tokensToEvict.map(sessionKey));
     transaction.zRem(userKey, tokensToEvict);
+    evictedCount = tokensToEvict.length;
   }
   transaction.set(sessionKey(token), String(userId), { EX: SESSION_TTL_SECONDS });
   transaction.zAdd(userKey, {
@@ -29,6 +32,16 @@ const createSession = async (userId, token) => {
   });
   transaction.expire(userKey, SESSION_TTL_SECONDS);
   await transaction.exec();
+
+  const activeCount = activeTokens.length - evictedCount + 1;
+  redisLogger.info(
+    `Session created for user ${userId} (${activeCount}/${MAX_ACTIVE_SESSIONS} active)`,
+  );
+  if (evictedCount > 0) {
+    redisLogger.warn(
+      `Logged out ${evictedCount} oldest session(s) for user ${userId}: more than ${MAX_ACTIVE_SESSIONS} devices`,
+    );
+  }
 };
 
 const getSessionUserId = async (token) => {
@@ -42,6 +55,7 @@ const deleteSession = async (userId, token) => {
     .del(sessionKey(token))
     .zRem(userSessionsKey(userId), token)
     .exec();
+  redisLogger.info(`Session deleted for user ${userId} (logout)`);
 };
 
 module.exports = {
