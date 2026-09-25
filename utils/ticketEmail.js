@@ -88,4 +88,4 @@ const sendBookingTicket = async (bookingId) => {
   logger.info(`Ticket ${ticket.code} for booking ${bookingId} sent to ${ticket.email}`);
 };
 
-module.exports = { loadTicket, buildTicketText, sendBookingTicket };
+module.exports = { sendBookingTicket };
