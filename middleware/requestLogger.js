@@ -1,5 +1,4 @@
 const logger = require("../utils/logger");
-const winstonLogger = require("../utils/winstonLogger");
 
 const requestLogger = (req, res, next) => {
   const startTime = Date.now();
@@ -11,13 +10,10 @@ const requestLogger = (req, res, next) => {
 
     if (res.statusCode >= 500) {
       logger.error(message);
-      winstonLogger.error(message);
     } else if (res.statusCode >= 400) {
       logger.warn(message);
-      winstonLogger.warn(message);
     } else {
       logger.info(message);
-      winstonLogger.info(message);
     }
   });
 

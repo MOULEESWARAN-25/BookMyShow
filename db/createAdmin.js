@@ -2,7 +2,6 @@ require("dotenv").config();
 const bcrypt = require("bcrypt");
 const { User } = require("../models");
 const logger = require("../utils/logger");
-const winstonLogger = require("../utils/winstonLogger");
 
 const [name, rawEmail, password] = process.argv.slice(2);
 const email = rawEmail?.trim().toLowerCase();
@@ -32,14 +31,12 @@ const createAdmin = async () => {
     email: admin.email,
     role: admin.role,
   };
-  logger.info("Admin account created:", adminDetails);
-  winstonLogger.info(`Admin account created: ${JSON.stringify(adminDetails)}`);
+  logger.info(`Admin account created: ${JSON.stringify(adminDetails)}`);
 };
 
 createAdmin()
   .then(() => process.exit(0))
   .catch((error) => {
-    logger.error("Failed to create admin:", error.message);
-    winstonLogger.error(`Failed to create admin: ${error.message}`);
+    logger.error(`Failed to create admin: ${error.message}`);
     process.exit(1);
   });
