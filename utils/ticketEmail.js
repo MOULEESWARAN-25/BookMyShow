@@ -30,7 +30,12 @@ const loadTicket = async (bookingId) => {
     include: [
       { model: User, attributes: ["name", "email"] },
       { model: Show, include: [Movie, { model: Theatre, as: "theatre" }] },
-      { model: ShowSeat, as: "seats", attributes: ["seatNumber"], through: { attributes: [] } },
+      {
+        model: ShowSeat,
+        as: "seats",
+        attributes: ["seatNumber"],
+        through: { attributes: [] },
+      },
     ],
   });
   const { User: user, Show: show } = booking;
@@ -44,7 +49,11 @@ const loadTicket = async (bookingId) => {
     code: `BMS${String(booking.id).padStart(6, "0")}`,
     userName: user.name,
     movieTitle: movie.title,
-    movieInfo: [movie.language, movie.genre, `${movie.durationMinutes} min`].join(" · "),
+    movieInfo: [
+      movie.language,
+      movie.genre,
+      `${movie.durationMinutes} min`,
+    ].join(" · "),
     theatreName: theatre.name,
     theatreCity: theatre.city,
     date: formatDate(show.startsAt),
@@ -74,6 +83,20 @@ const buildTicketText = (ticket) =>
   ].join("\n");
 
 const sendBookingTicket = async (bookingId) => {
+  const booking = await Booking.findByPk(bookingId, {
+    attributes: ["id", "ticketSentAt"],
+  });
+  if (!booking) {
+    logger.warn(`Booking ${bookingId} no longer exists, no ticket to send`);
+    return;
+  }
+  if (booking.ticketSentAt) {
+    logger.info(
+      `Ticket for booking ${bookingId} was already sent at ${booking.ticketSentAt.toISOString()}, skipping`,
+    );
+    return;
+  }
+
   const ticket = await loadTicket(bookingId);
   const pdf = await buildTicketPdf(ticket);
 
@@ -82,10 +105,20 @@ const sendBookingTicket = async (bookingId) => {
     subject: `Your tickets for ${ticket.movieTitle} · ${ticket.date}, ${ticket.startTime}`,
     text: buildTicketText(ticket),
     attachments: [
-      { filename: `ticket-${ticket.code}.pdf`, content: pdf, contentType: "application/pdf" },
+      {
+        filename: `ticket-${ticket.code}.pdf`,
+        content: pdf,
+        contentType: "application/pdf",
+      },
     ],
   });
-  logger.info(`Ticket ${ticket.code} for booking ${bookingId} sent to ${ticket.email}`);
+  await Booking.update(
+    { ticketSentAt: new Date() },
+    { where: { id: bookingId } },
+  );
+  logger.info(
+    `Ticket ${ticket.code} for booking ${bookingId} sent to ${ticket.email}`,
+  );
 };
 
 module.exports = { sendBookingTicket };

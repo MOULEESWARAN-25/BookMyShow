@@ -21,6 +21,11 @@ const Booking = sequelize.define(
       defaultValue: "confirmed",
       validate: { isIn: [["confirmed", "cancelled"]] },
     },
+    ticketSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "ticket_sent_at",
+    },
     createdAt: {
       type: DataTypes.DATE,
       allowNull: false,

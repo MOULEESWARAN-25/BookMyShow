@@ -1,5 +1,11 @@
 const { Op } = require("sequelize");
-const { sequelize, Show, ShowSeat, Booking, BookingSeat } = require("../models");
+const {
+  sequelize,
+  Show,
+  ShowSeat,
+  Booking,
+  BookingSeat,
+} = require("../models");
 const { parseId } = require("../utils/validation");
 const { addTicketEmailJob } = require("../queues/ticketEmail");
 const { logger } = require("../utils/logger");
@@ -42,19 +48,29 @@ const createBooking = async (req, res) => {
       }
 
       const seatRows = await ShowSeat.findAll({
-        where: { showId: numericShowId, seatNumber: { [Op.in]: requestedSeats } },
+        where: {
+          showId: numericShowId,
+          seatNumber: { [Op.in]: requestedSeats },
+        },
         transaction,
         lock: transaction.LOCK.UPDATE,
       });
 
-      const seatsByNumber = new Map(seatRows.map((seat) => [seat.seatNumber, seat]));
-      const missingSeat = requestedSeats.find((seat) => !seatsByNumber.has(seat));
+      const seatsByNumber = new Map(
+        seatRows.map((seat) => [seat.seatNumber, seat]),
+      );
+      const missingSeat = requestedSeats.find(
+        (seat) => !seatsByNumber.has(seat),
+      );
       if (missingSeat) {
         throw new BookingError(400, `Seat ${missingSeat} does not exist`);
       }
       const bookedSeat = seatRows.find((seat) => seat.status === "booked");
       if (bookedSeat) {
-        throw new BookingError(409, `Seat ${bookedSeat.seatNumber} is already booked`);
+        throw new BookingError(
+          409,
+          `Seat ${bookedSeat.seatNumber} is already booked`,
+        );
       }
 
       await ShowSeat.update(
@@ -95,7 +111,9 @@ const createBooking = async (req, res) => {
     });
 
     addTicketEmailJob(booking.id).catch((error) => {
-      logger.error(`Could not queue ticket email for booking ${booking.id}: ${error.message}`);
+      logger.error(
+        `Could not queue ticket email for booking ${booking.id}: ${error.message}`,
+      );
     });
   } catch (error) {
     if (error instanceof BookingError) {
