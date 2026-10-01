@@ -13,9 +13,15 @@ const bookingRoutes = require("./routes/booking");
 const movieRoutes = require("./routes/movie");
 const showRoutes = require("./routes/show");
 const theatreRoutes = require("./routes/theatre");
+const trackingRoutes = require("./routes/tracking");
+const queueDashboard = require("./queues/dashboard");
 const app = express();
 
 app.use(requestLogger);
+app.use("/api/tracking", trackingRoutes);
+if (process.env.NODE_ENV !== "production") {
+  app.use(queueDashboard.BASE_PATH, queueDashboard.router);
+}
 app.use(
   rateLimit({
     name: "api",

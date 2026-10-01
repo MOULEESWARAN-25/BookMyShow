@@ -1,14 +1,7 @@
 const { Queue } = require("bullmq");
+const { connection } = require("./connection");
 
 const QUEUE_NAME = "ticket-emails";
-
-const redisUrl = new URL(process.env.REDIS_URL || "redis://localhost:6379");
-const connection = {
-  host: redisUrl.hostname,
-  port: Number(redisUrl.port || 6379),
-  username: redisUrl.username || undefined,
-  password: redisUrl.password || undefined,
-};
 
 let queue;
 const getQueue = () => {
@@ -31,4 +24,4 @@ const addTicketEmailJob = (bookingId) =>
     },
   );
 
-module.exports = { QUEUE_NAME, connection, addTicketEmailJob };
+module.exports = { QUEUE_NAME, getQueue, addTicketEmailJob };

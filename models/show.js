@@ -8,6 +8,11 @@ const Show = sequelize.define(
     theatreId: { type: DataTypes.INTEGER, allowNull: false, field: "theatre_id" },
     startsAt: { type: DataTypes.DATE, allowNull: false, field: "starts_at" },
     endsAt: { type: DataTypes.DATE, allowNull: false, field: "ends_at" },
+    reminderQueuedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "reminder_queued_at",
+    },
     price: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,

@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "private": true,
   "dependencies": {
+    "@bull-board/api": "^9.10.2",
+    "@bull-board/express": "^9.10.2",
     "bcrypt": "^6.0.0",
     "bullmq": "^6.3.8",
     "dotenv": "^17.4.2",
@@ -27,6 +29,6 @@
     "migrate:undo": "sequelize-cli db:migrate:undo",
     "migrate:status": "sequelize-cli db:migrate:status",
     "migrate:undo:all": "sequelize-cli db:migrate:undo:all",
-    "worker": "nodemon workers/ticketEmail.js"
+    "worker": "nodemon workers/index.js"
   }
 }

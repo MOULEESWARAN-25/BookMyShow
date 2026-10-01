@@ -2,6 +2,7 @@ const { Booking, User, Show, Movie, Theatre, ShowSeat } = require("../models");
 const { sendMail } = require("./mailer");
 const { buildTicketPdf } = require("./ticketPdf");
 const { logger } = require("./logger");
+const { openTrackingUrl } = require("./emailTracking");
 
 const TIMEZONE = "Asia/Kolkata";
 
@@ -24,6 +25,25 @@ const formatTime = (date) =>
 
 const formatAmount = (amount) =>
   `Rs. ${new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2 }).format(amount)}`;
+
+const escapeHtml = (value) =>
+  String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+
+const textToHtml = (text, bookingId) =>
+  `<div style="font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:1.6;color:#1c1f26;">${text
+    .split("\n\n")
+    .map((paragraph) => `<p>${escapeHtml(paragraph).replace(/\n/g, "<br>")}</p>`)
+    .join("")}</div><img src="${openTrackingUrl(bookingId)}" width="1" height="1" alt="" style="display:block;border:0;">`;
+
+const ticketAttachment = (ticket, pdf) => ({
+  filename: `ticket-${ticket.code}.pdf`,
+  content: pdf,
+  contentType: "application/pdf",
+});
 
 const loadTicket = async (bookingId) => {
   const booking = await Booking.findByPk(bookingId, {
@@ -100,17 +120,13 @@ const sendBookingTicket = async (bookingId) => {
   const ticket = await loadTicket(bookingId);
   const pdf = await buildTicketPdf(ticket);
 
+  const text = buildTicketText(ticket);
   await sendMail({
     to: ticket.email,
     subject: `Your tickets for ${ticket.movieTitle} · ${ticket.date}, ${ticket.startTime}`,
-    text: buildTicketText(ticket),
-    attachments: [
-      {
-        filename: `ticket-${ticket.code}.pdf`,
-        content: pdf,
-        contentType: "application/pdf",
-      },
-    ],
+    text,
+    html: textToHtml(text, bookingId),
+    attachments: [ticketAttachment(ticket, pdf)],
   });
   await Booking.update(
     { ticketSentAt: new Date() },
@@ -121,4 +137,61 @@ const sendBookingTicket = async (bookingId) => {
   );
 };
 
-module.exports = { sendBookingTicket };
+const buildReminderText = (ticket) =>
+  [
+    `Hi ${ticket.userName},`,
+    "",
+    `${ticket.movieTitle} starts in 30 minutes, at ${ticket.startTime}. Your ticket is attached again in case you need it.`,
+    "",
+    `Theatre:    ${ticket.theatreName}, ${ticket.theatreCity}`,
+    `Seats:      ${ticket.seats.join(", ")}`,
+    `Booking ID: ${ticket.code}`,
+    "",
+    "Show the ticket at the entrance. Enjoy the show!",
+  ].join("\n");
+
+const sendShowReminder = async (bookingId) => {
+  const booking = await Booking.findByPk(bookingId, {
+    attributes: ["id", "status", "ticketOpenedAt", "reminderSentAt"],
+    include: [{ model: Show, attributes: ["startsAt"] }],
+  });
+  if (!booking || booking.status !== "confirmed") {
+    logger.info(`Booking ${bookingId} is gone or cancelled, no reminder needed`);
+    return;
+  }
+  if (booking.ticketOpenedAt) {
+    logger.info(
+      `Booking ${bookingId}: ticket email was opened at ${booking.ticketOpenedAt.toISOString()}, no reminder needed`,
+    );
+    return;
+  }
+  if (booking.reminderSentAt) {
+    logger.info(
+      `Booking ${bookingId}: reminder already sent at ${booking.reminderSentAt.toISOString()}, skipping`,
+    );
+    return;
+  }
+  if (booking.Show.startsAt <= new Date()) {
+    logger.info(`Booking ${bookingId}: show has already started, reminder skipped`);
+    return;
+  }
+
+  const ticket = await loadTicket(bookingId);
+  const pdf = await buildTicketPdf(ticket);
+  const text = buildReminderText(ticket);
+
+  await sendMail({
+    to: ticket.email,
+    subject: `Reminder: ${ticket.movieTitle} starts at ${ticket.startTime} today`,
+    text,
+    html: textToHtml(text, bookingId),
+    attachments: [ticketAttachment(ticket, pdf)],
+  });
+  await Booking.update(
+    { reminderSentAt: new Date() },
+    { where: { id: bookingId } },
+  );
+  logger.info(`Reminder for booking ${bookingId} sent to ${ticket.email}`);
+};
+
+module.exports = { sendBookingTicket, sendShowReminder };

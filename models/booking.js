@@ -26,6 +26,16 @@ const Booking = sequelize.define(
       allowNull: true,
       field: "ticket_sent_at",
     },
+    ticketOpenedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "ticket_opened_at",
+    },
+    reminderSentAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "reminder_sent_at",
+    },
     createdAt: {
       type: DataTypes.DATE,
       allowNull: false,
