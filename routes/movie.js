@@ -1,11 +1,12 @@
 const express = require("express");
-const authMiddleware = require("../middleware/auth");
-const adminMiddleware = require("../middleware/admin");
+const requireAdmin = require("../middleware/admin");
 const {
   listMovies,
   getMovie,
   listShows,
   createMovie,
+  updateMovie,
+  deleteMovie,
 } = require("../controllers/movie");
 
 const router = express.Router();
@@ -13,6 +14,8 @@ const router = express.Router();
 router.get("/", listMovies);
 router.get("/:movieId", getMovie);
 router.get("/:movieId/shows", listShows);
-router.post("/", authMiddleware, adminMiddleware, createMovie);
+router.post("/", requireAdmin, createMovie);
+router.patch("/:movieId", requireAdmin, updateMovie);
+router.delete("/:movieId", requireAdmin, deleteMovie);
 
 module.exports = router;

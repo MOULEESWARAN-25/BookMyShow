@@ -1,6 +1,5 @@
 const express = require("express");
-const authMiddleware = require("../middleware/auth");
-const adminMiddleware = require("../middleware/admin");
+const requireAdmin = require("../middleware/admin");
 const {
   getSummary,
   rankMovies,
@@ -12,7 +11,7 @@ const {
 
 const router = express.Router();
 
-router.use(authMiddleware, adminMiddleware);
+router.use(requireAdmin);
 
 router.get("/summary", getSummary);
 router.get("/movies", rankMovies);

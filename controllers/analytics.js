@@ -74,6 +74,7 @@ const runQuery = (req, filters, selectSql, extraReplacements = {}) => {
         JOIN theatres t ON t.id = s.theatre_id
         JOIN show_seats ss ON ss.show_id = s.id
        WHERE t.admin_id = :adminId
+         AND s.cancelled_at IS NULL
          ${dateFilters.join("\n         ")}
        GROUP BY s.id
     ),

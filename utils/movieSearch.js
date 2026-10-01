@@ -116,4 +116,4 @@ const searchMovieIds = async (text) => {
   return body.hits.hits.map((hit) => Number(hit._id));
 };
 
-module.exports = { INDEX, ensureMoviesIndex, indexMovie, reindexAllMovies, searchMovieIds };
+module.exports = { ensureMoviesIndex, indexMovie, reindexAllMovies, searchMovieIds };

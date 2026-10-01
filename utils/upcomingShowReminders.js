@@ -12,6 +12,7 @@ const queueRemindersForUpcomingShows = () =>
         WHERE id IN (
           SELECT id FROM shows
            WHERE reminder_queued_at IS NULL
+             AND cancelled_at IS NULL
              AND starts_at > now()
              AND starts_at <= now() + make_interval(mins => :minutes)
            FOR UPDATE SKIP LOCKED
@@ -29,16 +30,20 @@ const queueRemindersForUpcomingShows = () =>
 
     const showIds = shows.map((show) => show.id);
     const bookings = await sequelize.query(
-      `SELECT id FROM bookings
-        WHERE show_id IN (:showIds)
-          AND status = 'confirmed'
-          AND ticket_opened_at IS NULL
-          AND reminder_sent_at IS NULL`,
+      `SELECT b.id, s.starts_at AS "startsAt"
+         FROM bookings b
+         JOIN shows s ON s.id = b.show_id
+        WHERE b.show_id IN (:showIds)
+          AND b.status = 'confirmed'
+          AND b.ticket_opened_at IS NULL
+          AND b.reminder_sent_at IS NULL`,
       { replacements: { showIds }, type: QueryTypes.SELECT, transaction },
     );
 
     if (bookings.length > 0) {
-      await addReminderEmailJobs(bookings.map((booking) => booking.id));
+      await addReminderEmailJobs(
+        bookings.map((booking) => ({ bookingId: booking.id, startsAt: booking.startsAt })),
+      );
     }
     logger.info(
       `Shows ${showIds.join(", ")} start within ${REMIND_BEFORE_MINUTES} minutes: queued ${bookings.length} reminder email(s)`,

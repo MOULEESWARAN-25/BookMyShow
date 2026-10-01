@@ -22,7 +22,7 @@ const MOVIE_ATTRIBUTES = [
   "castMembers",
 ];
 
-const upcoming = () => ({ startsAt: { [Op.gt]: new Date() } });
+const upcoming = () => ({ startsAt: { [Op.gt]: new Date() }, cancelledAt: null });
 
 const findMovies = async (search, theatre) => {
   let movieWhere = {};
@@ -165,84 +165,146 @@ const listShows = async (req, res) => {
   res.status(200).json({ shows });
 };
 
-const createMovie = async (req, res) => {
-  const {
-    title,
-    description,
-    language,
-    genre,
-    durationMinutes,
-    releaseDate,
-    castMembers,
-  } = req.body || {};
+const duplicateMovie = (res) =>
+  res.status(409).json({
+    message: "A movie with this title, language and release date already exists",
+  });
 
-  if (![title, language, genre].every(isNonEmptyString)) {
-    return res
-      .status(400)
-      .json({ message: "title, language, and genre are required" });
+const movieJson = (movie) =>
+  Object.fromEntries(MOVIE_ATTRIBUTES.map((attribute) => [attribute, movie[attribute]]));
+
+const parseMovieFields = (body, { partial }) => {
+  const { title, description, language, genre, durationMinutes, releaseDate, castMembers } =
+    body || {};
+  const has = (value) => value !== undefined;
+
+  for (const [name, value] of [["title", title], ["language", language], ["genre", genre]]) {
+    if ((!partial || has(value)) && !isNonEmptyString(value)) {
+      return { error: partial ? `${name} cannot be empty` : "title, language, and genre are required" };
+    }
   }
-
-  if (!Number.isInteger(durationMinutes) || durationMinutes <= 0) {
-    return res
-      .status(400)
-      .json({ message: "durationMinutes must be a positive integer" });
+  if ((!partial || has(durationMinutes)) && (!Number.isInteger(durationMinutes) || durationMinutes <= 0)) {
+    return { error: "durationMinutes must be a positive integer" };
   }
-
-  if (description !== undefined && typeof description !== "string") {
-    return res.status(400).json({ message: "description must be a string" });
+  if (has(description) && description !== null && typeof description !== "string") {
+    return { error: "description must be a string" };
   }
-
   if (
-    releaseDate !== undefined &&
+    has(releaseDate) &&
+    releaseDate !== null &&
     (typeof releaseDate !== "string" ||
       !/^\d{4}-\d{2}-\d{2}$/.test(releaseDate) ||
       Number.isNaN(Date.parse(releaseDate)))
   ) {
-    return res
-      .status(400)
-      .json({ message: "releaseDate must be a date in YYYY-MM-DD format" });
+    return { error: "releaseDate must be a date in YYYY-MM-DD format" };
   }
-
   if (
-    castMembers !== undefined &&
+    has(castMembers) &&
+    castMembers !== null &&
     (!Array.isArray(castMembers) || !castMembers.every(isNonEmptyString))
   ) {
-    return res
-      .status(400)
-      .json({ message: "castMembers must be an array of names" });
+    return { error: "castMembers must be an array of names" };
+  }
+
+  const values = {};
+  if (has(title)) values.title = title.trim();
+  if (has(description)) values.description = description?.trim() || null;
+  if (has(language)) values.language = language.trim();
+  if (has(genre)) values.genre = genre.trim();
+  if (has(durationMinutes)) values.durationMinutes = durationMinutes;
+  if (has(releaseDate)) values.releaseDate = releaseDate;
+  if (has(castMembers)) values.castMembers = castMembers?.map((name) => name.trim()) ?? null;
+  if (!partial) {
+    values.description ??= null;
+    values.releaseDate ??= null;
+    values.castMembers ??= null;
+  }
+  return { values };
+};
+
+const afterMovieChange = async (movieId) => {
+  await clearCache(moviesCacheKey());
+  addIndexMovieJob(movieId).catch((error) => {
+    logger.error(`Could not queue search indexing for movie ${movieId}: ${error.message}`);
+  });
+};
+
+const createMovie = async (req, res) => {
+  const { values, error } = parseMovieFields(req.body, { partial: false });
+  if (error) {
+    return res.status(400).json({ message: error });
   }
 
   let movie;
   try {
-    movie = await Movie.create({
-      title: title.trim(),
-      description: description?.trim() || null,
-      language: language.trim(),
-      genre: genre.trim(),
-      durationMinutes,
-      releaseDate: releaseDate ?? null,
-      castMembers: castMembers?.map((name) => name.trim()) ?? null,
-      createdBy: req.user.userId,
-    });
+    movie = await Movie.create({ ...values, createdBy: req.user.userId });
   } catch (error) {
     if (error instanceof UniqueConstraintError) {
-      return res.status(409).json({
-        message: "A movie with this title, language and release date already exists",
-      });
+      return duplicateMovie(res);
     }
     throw error;
   }
-  await clearCache(moviesCacheKey());
-  addIndexMovieJob(movie.id).catch((error) => {
-    logger.error(`Could not queue search indexing for movie ${movie.id}: ${error.message}`);
-  });
+  await afterMovieChange(movie.id);
 
-  res.status(201).json({
-    message: "Movie created successfully",
-    movie: Object.fromEntries(
-      MOVIE_ATTRIBUTES.map((attribute) => [attribute, movie[attribute]]),
-    ),
-  });
+  res.status(201).json({ message: "Movie created successfully", movie: movieJson(movie) });
+};
+
+const findOwnMovie = async (req, res) => {
+  const movieId = parseId(req.params.movieId);
+  if (!movieId) {
+    res.status(400).json({ message: "movieId must be a positive integer" });
+    return null;
+  }
+  const movie = await Movie.findByPk(movieId);
+  if (!movie) {
+    res.status(404).json({ message: "Movie not found" });
+    return null;
+  }
+  if (movie.createdBy !== req.user.userId) {
+    res.status(403).json({ message: "You can only change movies you added" });
+    return null;
+  }
+  return movie;
+};
+
+const updateMovie = async (req, res) => {
+  const { values, error } = parseMovieFields(req.body, { partial: true });
+  if (error) {
+    return res.status(400).json({ message: error });
+  }
+  if (Object.keys(values).length === 0) {
+    return res.status(400).json({ message: "Send at least one field to change" });
+  }
+
+  const movie = await findOwnMovie(req, res);
+  if (!movie) return;
+
+  try {
+    await movie.update(values);
+  } catch (error) {
+    if (error instanceof UniqueConstraintError) {
+      return duplicateMovie(res);
+    }
+    throw error;
+  }
+  await afterMovieChange(movie.id);
+
+  res.status(200).json({ message: "Movie updated successfully", movie: movieJson(movie) });
+};
+
+const deleteMovie = async (req, res) => {
+  const movie = await findOwnMovie(req, res);
+  if (!movie) return;
+
+  const shows = await Show.count({ where: { movieId: movie.id } });
+  if (shows > 0) {
+    return res.status(409).json({
+      message: `This movie has ${shows} show(s), so it is kept for booking history. Delete or cancel its shows first.`,
+    });
+  }
+  await movie.destroy();
+  await afterMovieChange(movie.id);
+  res.status(200).json({ message: "Movie deleted" });
 };
 
 module.exports = {
@@ -250,4 +312,6 @@ module.exports = {
   getMovie,
   listShows,
   createMovie,
+  updateMovie,
+  deleteMovie,
 };

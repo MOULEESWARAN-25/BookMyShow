@@ -1,43 +1,21 @@
-const { Worker } = require("bullmq");
-const { connection } = require("../queues/connection");
+const createWorker = require("./createWorker");
 const { QUEUE_NAME } = require("../queues/ticketEmail");
-const { sendBookingTicket } = require("../utils/ticketEmail");
-const { logger } = require("../utils/logger");
+const {
+  sendBookingTicket,
+  sendShowUpdatedEmail,
+  sendShowCancelledEmail,
+} = require("../utils/ticketEmail");
 
-const worker = new Worker(
-  QUEUE_NAME,
-  async (job) => {
-    await sendBookingTicket(job.data.bookingId);
-  },
-  {
-    connection: { ...connection, maxRetriesPerRequest: null },
-    concurrency: 5,
-  },
-);
+const processors = {
+  "send-ticket": (job) => sendBookingTicket(job.data.bookingId),
+  "show-updated": (job) => sendShowUpdatedEmail(job.data.bookingId, job.data.startsAt),
+  "show-cancelled": (job) => sendShowCancelledEmail(job.data.bookingId),
+};
 
-worker.on("ready", () =>
-  logger.info(`Ticket email worker listening on ${QUEUE_NAME}`),
-);
-
-worker.on("completed", (job) => {
-  logger.info(`Job ${job.id} completed after ${job.attemptsMade} attempt(s)`);
-});
-
-worker.on("failed", (job, error) => {
-  const attempts = `${job.attemptsMade}/${job.opts.attempts}`;
-  if (job.attemptsMade < job.opts.attempts) {
-    logger.warn(
-      `Job ${job.id} failed (attempt ${attempts}), retrying: ${error.message}`,
-    );
-  } else {
-    logger.error(
-      `Job ${job.id} failed for good after ${attempts} attempts: ${error.message}`,
-    );
+module.exports = createWorker(QUEUE_NAME, "Ticket email", (job) => {
+  const handle = processors[job.name];
+  if (!handle) {
+    throw new Error(`Unknown job type "${job.name}"`);
   }
+  return handle(job);
 });
-
-worker.on("error", (error) =>
-  logger.error(`Ticket email worker error: ${error.message}`),
-);
-
-module.exports = worker;

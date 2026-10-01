@@ -194,4 +194,76 @@ const sendShowReminder = async (bookingId) => {
   logger.info(`Reminder for booking ${bookingId} sent to ${ticket.email}`);
 };
 
-module.exports = { sendBookingTicket, sendShowReminder };
+const sendShowUpdatedEmail = async (bookingId, startsAt) => {
+  const booking = await Booking.findByPk(bookingId, {
+    attributes: ["id", "status"],
+    include: [{ model: Show, attributes: ["startsAt", "cancelledAt"] }],
+  });
+  if (!booking || booking.status !== "confirmed" || booking.Show.cancelledAt) {
+    logger.info(`Booking ${bookingId} is no longer active, no time-change email needed`);
+    return;
+  }
+  if (booking.Show.startsAt.getTime() !== new Date(startsAt).getTime()) {
+    logger.info(
+      `Booking ${bookingId}: show time changed again since this email was queued, skipping`,
+    );
+    return;
+  }
+
+  const ticket = await loadTicket(bookingId);
+  const pdf = await buildTicketPdf(ticket);
+  const text = [
+    `Hi ${ticket.userName},`,
+    "",
+    `The time of your show for ${ticket.movieTitle} has changed.`,
+    "",
+    `New date:   ${ticket.date}`,
+    `New time:   ${ticket.time}`,
+    `Theatre:    ${ticket.theatreName}, ${ticket.theatreCity}`,
+    `Seats:      ${ticket.seats.join(", ")}`,
+    `Booking ID: ${ticket.code}`,
+    "",
+    "Your updated ticket is attached. Your seats stay the same.",
+  ].join("\n");
+
+  await sendMail({
+    to: ticket.email,
+    subject: `Show time changed: ${ticket.movieTitle} is now on ${ticket.date}, ${ticket.startTime}`,
+    text,
+    html: textToHtml(text, bookingId),
+    attachments: [ticketAttachment(ticket, pdf)],
+  });
+  logger.info(`Time-change email for booking ${bookingId} sent to ${ticket.email}`);
+};
+
+const sendShowCancelledEmail = async (bookingId) => {
+  const booking = await Booking.findByPk(bookingId, { attributes: ["id", "status"] });
+  if (!booking || booking.status !== "cancelled") {
+    logger.info(`Booking ${bookingId} is not cancelled, no cancellation email needed`);
+    return;
+  }
+
+  const ticket = await loadTicket(bookingId);
+  const text = [
+    `Hi ${ticket.userName},`,
+    "",
+    `We are sorry: the show for ${ticket.movieTitle} on ${ticket.date} at ${ticket.startTime} at ${ticket.theatreName}, ${ticket.theatreCity} has been cancelled by the theatre.`,
+    "",
+    `Your booking ${ticket.code} (seats ${ticket.seats.join(", ")}) has been cancelled.`,
+  ].join("\n");
+
+  await sendMail({
+    to: ticket.email,
+    subject: `Show cancelled: ${ticket.movieTitle} on ${ticket.date}, ${ticket.startTime}`,
+    text,
+    html: textToHtml(text, bookingId),
+  });
+  logger.info(`Cancellation email for booking ${bookingId} sent to ${ticket.email}`);
+};
+
+module.exports = {
+  sendBookingTicket,
+  sendShowReminder,
+  sendShowUpdatedEmail,
+  sendShowCancelledEmail,
+};

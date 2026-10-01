@@ -43,6 +43,9 @@ const createBooking = async (req, res) => {
       if (!show) {
         throw new BookingError(404, "Show not found");
       }
+      if (show.cancelledAt) {
+        throw new BookingError(400, "This show was cancelled");
+      }
       if (show.startsAt <= new Date()) {
         throw new BookingError(400, "This show has already started");
       }

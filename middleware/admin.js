@@ -1,4 +1,6 @@
-const adminMiddleware = (req, res, next) => {
+const authMiddleware = require("./auth");
+
+const adminOnly = (req, res, next) => {
   if (req.user.role !== "admin") {
     return res.status(403).json({ message: "Admin access required" });
   }
@@ -6,4 +8,6 @@ const adminMiddleware = (req, res, next) => {
   next();
 };
 
-module.exports = adminMiddleware;
+const requireAdmin = [authMiddleware, adminOnly];
+
+module.exports = requireAdmin;

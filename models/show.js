@@ -13,6 +13,11 @@ const Show = sequelize.define(
       allowNull: true,
       field: "reminder_queued_at",
     },
+    cancelledAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      field: "cancelled_at",
+    },
     price: {
       type: DataTypes.DECIMAL(10, 2),
       allowNull: false,

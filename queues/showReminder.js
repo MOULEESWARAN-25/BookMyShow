@@ -1,17 +1,9 @@
-const { Queue } = require("bullmq");
-const { connection } = require("./connection");
+const { lazyQueue, retryOptions } = require("./connection");
 
 const QUEUE_NAME = "show-reminders";
 const CHECK_JOB = "check-upcoming-shows";
 const SEND_JOB = "send-reminder";
-
-let queue;
-const getQueue = () => {
-  queue ??= new Queue(QUEUE_NAME, {
-    connection: { ...connection, enableOfflineQueue: false },
-  });
-  return queue;
-};
+const getQueue = lazyQueue(QUEUE_NAME);
 
 const scheduleUpcomingShowChecks = () =>
   getQueue().upsertJobScheduler(
@@ -26,17 +18,14 @@ const scheduleUpcomingShowChecks = () =>
     },
   );
 
-const addReminderEmailJobs = (bookingIds) =>
+const addReminderEmailJobs = (reminders) =>
   getQueue().addBulk(
-    bookingIds.map((bookingId) => ({
+    reminders.map(({ bookingId, startsAt }) => ({
       name: SEND_JOB,
       data: { bookingId },
       opts: {
-        jobId: `reminder-${bookingId}`,
-        attempts: 3,
-        backoff: { type: "exponential", delay: 20 * 1000 },
-        removeOnComplete: { age: 24 * 60 * 60 },
-        removeOnFail: { age: 7 * 24 * 60 * 60 },
+        ...retryOptions(3, 20),
+        jobId: `reminder-${bookingId}-${new Date(startsAt).getTime()}`,
       },
     })),
   );
@@ -44,7 +33,6 @@ const addReminderEmailJobs = (bookingIds) =>
 module.exports = {
   QUEUE_NAME,
   CHECK_JOB,
-  SEND_JOB,
   getQueue,
   scheduleUpcomingShowChecks,
   addReminderEmailJobs,

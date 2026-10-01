@@ -1,27 +1,41 @@
-const { Queue } = require("bullmq");
-const { connection } = require("./connection");
+const { lazyQueue, retryOptions } = require("./connection");
 
 const QUEUE_NAME = "ticket-emails";
-
-let queue;
-const getQueue = () => {
-  queue ??= new Queue(QUEUE_NAME, {
-    connection: { ...connection, enableOfflineQueue: false },
-  });
-  return queue;
-};
+const getQueue = lazyQueue(QUEUE_NAME);
+const EMAIL_JOB_OPTIONS = retryOptions(5, 10);
 
 const addTicketEmailJob = (bookingId) =>
   getQueue().add(
     "send-ticket",
     { bookingId },
-    {
-      jobId: `booking-${bookingId}`,
-      attempts: 5,
-      backoff: { type: "exponential", delay: 10 * 1000 },
-      removeOnComplete: { age: 24 * 60 * 60 },
-      removeOnFail: { age: 7 * 24 * 60 * 60 },
-    },
+    { ...EMAIL_JOB_OPTIONS, jobId: `booking-${bookingId}` },
   );
 
-module.exports = { QUEUE_NAME, getQueue, addTicketEmailJob };
+const addShowUpdatedEmailJobs = (bookingIds, startsAt) =>
+  getQueue().addBulk(
+    bookingIds.map((bookingId) => ({
+      name: "show-updated",
+      data: { bookingId, startsAt: startsAt.toISOString() },
+      opts: {
+        ...EMAIL_JOB_OPTIONS,
+        jobId: `show-updated-${bookingId}-${startsAt.getTime()}`,
+      },
+    })),
+  );
+
+const addShowCancelledEmailJobs = (bookingIds) =>
+  getQueue().addBulk(
+    bookingIds.map((bookingId) => ({
+      name: "show-cancelled",
+      data: { bookingId },
+      opts: { ...EMAIL_JOB_OPTIONS, jobId: `show-cancelled-${bookingId}` },
+    })),
+  );
+
+module.exports = {
+  QUEUE_NAME,
+  getQueue,
+  addTicketEmailJob,
+  addShowUpdatedEmailJobs,
+  addShowCancelledEmailJobs,
+};
