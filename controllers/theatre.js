@@ -1,3 +1,4 @@
+const { UniqueConstraintError } = require("sequelize");
 const { Theatre } = require("../models");
 const { isNonEmptyString } = require("../utils/validation");
 
@@ -8,11 +9,21 @@ const createTheatre = async (req, res) => {
     return res.status(400).json({ message: "name and city are required" });
   }
 
-  const theatre = await Theatre.create({
-    adminId: req.user.userId,
-    name: name.trim(),
-    city: city.trim(),
-  });
+  let theatre;
+  try {
+    theatre = await Theatre.create({
+      adminId: req.user.userId,
+      name: name.trim(),
+      city: city.trim(),
+    });
+  } catch (error) {
+    if (error instanceof UniqueConstraintError) {
+      return res
+        .status(409)
+        .json({ message: "You already have a theatre with this name" });
+    }
+    throw error;
+  }
 
   res.status(201).json({
     message: "Theatre created successfully",

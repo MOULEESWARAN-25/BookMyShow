@@ -1,4 +1,4 @@
-const { Op } = require("sequelize");
+const { Op, UniqueConstraintError } = require("sequelize");
 const { Movie, Show, Theatre } = require("../models");
 const { parseId, isNonEmptyString, escapeLike } = require("../utils/validation");
 const {
@@ -193,16 +193,26 @@ const createMovie = async (req, res) => {
       .json({ message: "castMembers must be an array of names" });
   }
 
-  const movie = await Movie.create({
-    title: title.trim(),
-    description: description?.trim() || null,
-    language: language.trim(),
-    genre: genre.trim(),
-    durationMinutes,
-    releaseDate: releaseDate ?? null,
-    castMembers: castMembers?.map((name) => name.trim()) ?? null,
-    createdBy: req.user.userId,
-  });
+  let movie;
+  try {
+    movie = await Movie.create({
+      title: title.trim(),
+      description: description?.trim() || null,
+      language: language.trim(),
+      genre: genre.trim(),
+      durationMinutes,
+      releaseDate: releaseDate ?? null,
+      castMembers: castMembers?.map((name) => name.trim()) ?? null,
+      createdBy: req.user.userId,
+    });
+  } catch (error) {
+    if (error instanceof UniqueConstraintError) {
+      return res.status(409).json({
+        message: "A movie with this title, language and release date already exists",
+      });
+    }
+    throw error;
+  }
   await clearCache(moviesCacheKey());
 
   res.status(201).json({
