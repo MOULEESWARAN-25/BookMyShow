@@ -6,6 +6,7 @@ const { sequelize } = require("./models");
 const redis = require("./db/redis");
 const { logger } = require("./utils/logger");
 const requestLogger = require("./middleware/requestLogger");
+const basicAuth = require("./middleware/basicAuth");
 const { rateLimit, byUserOrIp } = require("./middleware/rateLimit");
 const analyticsRoutes = require("./routes/analytics");
 const authRoutes = require("./routes/auth");
@@ -19,8 +20,17 @@ const app = express();
 
 app.use(requestLogger);
 app.use("/api/tracking", trackingRoutes);
-if (process.env.NODE_ENV !== "production") {
-  app.use(queueDashboard.BASE_PATH, queueDashboard.router);
+const { QUEUE_DASHBOARD_USER, QUEUE_DASHBOARD_PASSWORD } = process.env;
+if (QUEUE_DASHBOARD_USER && QUEUE_DASHBOARD_PASSWORD) {
+  app.use(
+    queueDashboard.BASE_PATH,
+    basicAuth({
+      username: QUEUE_DASHBOARD_USER,
+      password: QUEUE_DASHBOARD_PASSWORD,
+      realm: "Queue dashboard",
+    }),
+    queueDashboard.router,
+  );
 }
 app.use(
   rateLimit({
