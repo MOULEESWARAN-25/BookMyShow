@@ -63,19 +63,28 @@ const indexMovie = async (movieId) => {
 const reindexAllMovies = async () => {
   await ensureMoviesIndex();
   const movies = await Movie.findAll({ order: [["id", "ASC"]] });
-  if (movies.length === 0) {
-    return 0;
+  if (movies.length > 0) {
+    const body = movies.flatMap((movie) => [
+      { index: { _index: INDEX, _id: String(movie.id) } },
+      toDocument(movie),
+    ]);
+    const { body: result } = await opensearch.bulk({ body, refresh: true });
+    if (result.errors) {
+      const failed = result.items.filter((item) => item.index.error);
+      throw new Error(`${failed.length} movie(s) failed to index: ${failed[0].index.error.reason}`);
+    }
   }
-  const body = movies.flatMap((movie) => [
-    { index: { _index: INDEX, _id: String(movie.id) } },
-    toDocument(movie),
-  ]);
-  const { body: result } = await opensearch.bulk({ body, refresh: true });
-  if (result.errors) {
-    const failed = result.items.filter((item) => item.index.error);
-    throw new Error(`${failed.length} movie(s) failed to index: ${failed[0].index.error.reason}`);
-  }
-  return movies.length;
+
+  const { body: removal } = await opensearch.deleteByQuery({
+    index: INDEX,
+    refresh: true,
+    body: {
+      query: {
+        bool: { must_not: { ids: { values: movies.map((movie) => String(movie.id)) } } },
+      },
+    },
+  });
+  return { indexed: movies.length, removed: removal.deleted };
 };
 
 const SUGGEST_FIELDS = (field) => [

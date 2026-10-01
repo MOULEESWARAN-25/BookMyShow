@@ -4,9 +4,10 @@ const { reindexAllMovies } = require("../utils/movieSearch");
 const { logger } = require("../utils/logger");
 
 reindexAllMovies()
-  .then(async (count) => {
-    logger.info(`Reindexed ${count} movie(s) into OpenSearch`);
-    console.log(`Reindexed ${count} movie(s) into OpenSearch`);
+  .then(async ({ indexed, removed }) => {
+    const summary = `Reindexed ${indexed} movie(s) into OpenSearch, removed ${removed} that no longer exist`;
+    logger.info(summary);
+    console.log(summary);
     await sequelize.close();
   })
   .catch(async (error) => {
