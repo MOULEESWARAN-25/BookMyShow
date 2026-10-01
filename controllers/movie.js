@@ -7,6 +7,9 @@ const {
   getCached,
   clearCache,
 } = require("../utils/cache");
+const { searchMovieIds } = require("../utils/movieSearch");
+const { addIndexMovieJob } = require("../queues/searchIndex");
+const { logger } = require("../utils/logger");
 
 const MOVIE_ATTRIBUTES = [
   "id",
@@ -21,10 +24,20 @@ const MOVIE_ATTRIBUTES = [
 
 const upcoming = () => ({ startsAt: { [Op.gt]: new Date() } });
 
-const findMovies = (search, theatre) => {
-  const movieWhere = isNonEmptyString(search)
-    ? { title: { [Op.iLike]: `%${escapeLike(search.trim())}%` } }
-    : {};
+const findMovies = async (search, theatre) => {
+  let movieWhere = {};
+  let rankedIds = null;
+  if (isNonEmptyString(search)) {
+    try {
+      rankedIds = await searchMovieIds(search.trim());
+      movieWhere = { id: rankedIds };
+    } catch (error) {
+      logger.warn(
+        `OpenSearch search failed, falling back to Postgres title search: ${error.message}`,
+      );
+      movieWhere = { title: { [Op.iLike]: `%${escapeLike(search.trim())}%` } };
+    }
+  }
   const include = isNonEmptyString(theatre)
     ? [
         {
@@ -47,13 +60,19 @@ const findMovies = (search, theatre) => {
       ]
     : [];
 
-  return Movie.findAll({
+  const movies = await Movie.findAll({
     attributes: MOVIE_ATTRIBUTES,
     where: movieWhere,
     include,
     group: ["Movie.id"],
     order: [["title", "ASC"]],
   });
+
+  if (rankedIds) {
+    const rank = new Map(rankedIds.map((id, index) => [id, index]));
+    movies.sort((a, b) => rank.get(a.id) - rank.get(b.id));
+  }
+  return movies;
 };
 
 // Only the unfiltered list is cached; search results vary too much to be worth it.
@@ -214,6 +233,9 @@ const createMovie = async (req, res) => {
     throw error;
   }
   await clearCache(moviesCacheKey());
+  addIndexMovieJob(movie.id).catch((error) => {
+    logger.error(`Could not queue search indexing for movie ${movie.id}: ${error.message}`);
+  });
 
   res.status(201).json({
     message: "Movie created successfully",

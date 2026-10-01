@@ -3,6 +3,7 @@ const { BullMQAdapter } = require("@bull-board/api/bullMQAdapter");
 const { ExpressAdapter } = require("@bull-board/express");
 const ticketEmail = require("./ticketEmail");
 const showReminder = require("./showReminder");
+const searchIndex = require("./searchIndex");
 
 const BASE_PATH = "/admin/queues";
 
@@ -13,6 +14,7 @@ createBullBoard({
   queues: [
     new BullMQAdapter(ticketEmail.getQueue()),
     new BullMQAdapter(showReminder.getQueue()),
+    new BullMQAdapter(searchIndex.getQueue()),
   ],
   serverAdapter,
 });
