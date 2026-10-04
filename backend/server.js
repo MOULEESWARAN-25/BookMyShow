@@ -35,8 +35,8 @@ if (QUEUE_DASHBOARD_USER && QUEUE_DASHBOARD_PASSWORD) {
 app.use(
   rateLimit({
     name: "api",
-    capacity: 10,
-    refillSeconds: 6,
+    capacity: 20,
+    refillSeconds: 2,
     message: "Too many requests. Try again in a few seconds",
     identify: byUserOrIp,
   }),

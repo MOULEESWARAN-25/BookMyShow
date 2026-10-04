@@ -2,6 +2,8 @@ const express = require("express");
 const requireAdmin = require("../middleware/admin");
 const {
   listMovies,
+  listAllMovies,
+  listMyMovies,
   getMovie,
   listShows,
   createMovie,
@@ -12,6 +14,8 @@ const {
 const router = express.Router();
 
 router.get("/", listMovies);
+router.get("/all", requireAdmin, listAllMovies);
+router.get("/mine", requireAdmin, listMyMovies);
 router.get("/:movieId", getMovie);
 router.get("/:movieId/shows", listShows);
 router.post("/", requireAdmin, createMovie);

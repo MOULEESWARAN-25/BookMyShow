@@ -1,7 +1,7 @@
 const { ExclusionConstraintError, ForeignKeyConstraintError } = require("sequelize");
 const { sequelize, Movie, Show, ShowSeat, Theatre, Booking } = require("../models");
 const { parseId } = require("../utils/validation");
-const { showsCacheKey, clearCache } = require("../utils/cache");
+const { moviesCacheKey, showsCacheKey, clearCache } = require("../utils/cache");
 const {
   addShowUpdatedEmailJobs,
   addShowCancelledEmailJobs,
@@ -74,6 +74,10 @@ const findOwnShow = async (req, res) => {
   }
   return show;
 };
+
+// The movie list only includes movies with upcoming shows, so it changes with shows too.
+const clearShowCaches = (movieId) =>
+  Promise.all([clearCache(showsCacheKey(movieId)), clearCache(moviesCacheKey())]);
 
 const queueEmails = (addJobs, label) =>
   addJobs().catch((error) =>
@@ -178,7 +182,7 @@ const createShow = async (req, res) => {
 
       return createdShow;
     });
-    await clearCache(showsCacheKey(numericMovieId));
+    await clearShowCaches(numericMovieId);
 
     res.status(201).json({
       message: "Show created successfully",
@@ -302,13 +306,16 @@ const updateShow = async (req, res) => {
     throw error;
   }
 
-  await clearCache(showsCacheKey(show.movieId));
+  await clearShowCaches(show.movieId);
   if (bookingIds.length > 0) {
     await queueEmails(() => addShowUpdatedEmailJobs(bookingIds, start), "time-change");
   }
 
   res.status(200).json({
-    message: "Show updated successfully",
+    message:
+      bookingIds.length > 0
+        ? `Show updated. ${bookingIds.length} customer(s) will be emailed about the new time`
+        : "Show updated successfully",
     show: {
       id: show.id,
       startsAt: show.startsAt,
@@ -352,7 +359,7 @@ const deleteShow = async (req, res) => {
     return { deleted: false, bookingIds };
   });
 
-  await clearCache(showsCacheKey(show.movieId));
+  await clearShowCaches(show.movieId);
   if (result.bookingIds.length > 0) {
     await queueEmails(() => addShowCancelledEmailJobs(result.bookingIds), "cancellation");
   }
@@ -361,7 +368,7 @@ const deleteShow = async (req, res) => {
     result.deleted
       ? { message: "Show deleted" }
       : {
-          message: "Show cancelled: it had bookings, so it is kept for history",
+          message: `Show cancelled and kept for history. ${result.bookingIds.length} booking(s) cancelled and customers emailed`,
           bookingsCancelled: result.bookingIds.length,
         },
   );
@@ -383,9 +390,11 @@ const addSeats = async (req, res) => {
   });
   await ShowSeat.bulkCreate(seats, { ignoreDuplicates: true });
 
+  const added = seats.length - existing;
   res.status(201).json({
-    message: "Seats added",
-    added: seats.length - existing,
+    message:
+      existing > 0 ? `${added} seat(s) added, ${existing} already existed` : `${added} seat(s) added`,
+    added,
     alreadyExisted: existing,
   });
 };

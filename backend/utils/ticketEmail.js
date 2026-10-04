@@ -262,6 +262,7 @@ const sendShowCancelledEmail = async (bookingId) => {
 };
 
 module.exports = {
+  loadTicket,
   sendBookingTicket,
   sendShowReminder,
   sendShowUpdatedEmail,

@@ -81,11 +81,21 @@ const runQuery = (req, filters, selectSql, extraReplacements = {}) => {
     show_bookings AS (
       SELECT b.show_id,
              count(*) FILTER (WHERE b.status = 'confirmed') AS bookings,
-             count(*) FILTER (WHERE b.status = 'cancelled') AS cancellations,
              coalesce(sum(b.total_amount) FILTER (WHERE b.status = 'confirmed'), 0) AS revenue
         FROM bookings b
        WHERE b.show_id IN (SELECT id FROM show_stats)
        GROUP BY b.show_id
+    ),
+    -- Bookings are only cancelled when a show is cancelled, and show_stats leaves cancelled
+    -- shows out, so cancelled bookings are counted over all of the owner's shows here.
+    cancelled_bookings AS (
+      SELECT count(*) AS cancellations
+        FROM bookings b
+        JOIN shows s ON s.id = b.show_id
+        JOIN theatres t ON t.id = s.theatre_id
+       WHERE t.admin_id = :adminId
+         AND b.status = 'cancelled'
+         ${dateFilters.join("\n         ")}
     )
     ${selectSql}`;
 
@@ -112,8 +122,8 @@ const getSummary = async (req, res) => {
     filters,
     `SELECT ${METRICS},
             count(st.id) FILTER (WHERE st.starts_at > now())::int AS "upcomingShows",
-            coalesce(sum(sb.cancellations), 0)::int AS cancellations,
-            coalesce(round(100.0 * sum(sb.cancellations) / nullif(sum(sb.bookings) + sum(sb.cancellations), 0), 1), 0)::float8 AS "cancellationRatePercent"
+            (SELECT cancellations FROM cancelled_bookings)::int AS cancellations,
+            coalesce(round(100.0 * (SELECT cancellations FROM cancelled_bookings) / nullif(coalesce(sum(sb.bookings), 0) + (SELECT cancellations FROM cancelled_bookings), 0), 1), 0)::float8 AS "cancellationRatePercent"
        FROM show_stats st
        LEFT JOIN show_bookings sb ON sb.show_id = st.id`,
   );

@@ -1,5 +1,5 @@
 const { Op, UniqueConstraintError } = require("sequelize");
-const { Movie, Show, Theatre } = require("../models");
+const { sequelize, Movie, Show, Theatre } = require("../models");
 const { parseId, isNonEmptyString, escapeLike } = require("../utils/validation");
 const {
   moviesCacheKey,
@@ -38,32 +38,39 @@ const findMovies = async (search, theatre) => {
       movieWhere = { title: { [Op.iLike]: `%${escapeLike(search.trim())}%` } };
     }
   }
-  const include = isNonEmptyString(theatre)
-    ? [
-        {
-          model: Show,
-          attributes: [],
-          required: true,
-          where: upcoming(),
-          include: [
-            {
-              model: Theatre,
-              as: "theatre",
-              attributes: [],
-              required: true,
-              where: {
-                name: { [Op.iLike]: `%${escapeLike(theatre.trim())}%` },
-              },
-            },
-          ],
-        },
-      ]
-    : [];
+  const theatreWhere = isNonEmptyString(theatre)
+    ? { name: { [Op.iLike]: `%${escapeLike(theatre.trim())}%` } }
+    : undefined;
 
+  // Customers can only book upcoming shows, so movies without one are not listed.
   const movies = await Movie.findAll({
-    attributes: MOVIE_ATTRIBUTES,
+    attributes: [
+      ...MOVIE_ATTRIBUTES,
+      // The cities where the movie is playing, so the movie list can be filtered by city.
+      [
+        sequelize.literal('array_agg(DISTINCT "Shows->theatre"."city" ORDER BY "Shows->theatre"."city")'),
+        "cities",
+      ],
+      // The theatres where it is playing, so the movie list can also be filtered by theatre.
+      [
+        sequelize.literal(
+          `json_agg(DISTINCT jsonb_build_object('id', "Shows->theatre"."id", 'name', "Shows->theatre"."name", 'city', "Shows->theatre"."city"))`,
+        ),
+        "theatres",
+      ],
+    ],
     where: movieWhere,
-    include,
+    include: [
+      {
+        model: Show,
+        attributes: [],
+        required: true,
+        where: upcoming(),
+        include: [
+          { model: Theatre, as: "theatre", attributes: [], required: true, where: theatreWhere },
+        ],
+      },
+    ],
     group: ["Movie.id"],
     order: [["title", "ASC"]],
   });
@@ -83,6 +90,34 @@ const listMovies = async (req, res) => {
     isNonEmptyString(search) || isNonEmptyString(theatre)
       ? await findMovies(search, theatre)
       : await getCached(moviesCacheKey(), () => findMovies());
+
+  res.status(200).json({ movies });
+};
+
+// Every movie, with or without shows, so an admin can pick one when adding a show.
+const listAllMovies = async (req, res) => {
+  const movies = await Movie.findAll({
+    attributes: MOVIE_ATTRIBUTES,
+    order: [["title", "ASC"]],
+  });
+
+  res.status(200).json({ movies });
+};
+
+const listMyMovies = async (req, res) => {
+  const movies = await sequelize.query(
+    `SELECT m.id, m.title, m.description, m.language, m.genre,
+            m.duration_minutes AS "durationMinutes",
+            to_char(m.release_date, 'YYYY-MM-DD') AS "releaseDate",
+            m.cast_members AS "castMembers",
+            count(s.id) FILTER (WHERE s.starts_at > now() AND s.cancelled_at IS NULL)::int AS "upcomingShows"
+       FROM movies m
+       LEFT JOIN shows s ON s.movie_id = m.id
+      WHERE m.created_by = :adminId
+      GROUP BY m.id
+      ORDER BY m.title`,
+    { replacements: { adminId: req.user.userId }, type: "SELECT" },
+  );
 
   res.status(200).json({ movies });
 };
@@ -162,7 +197,28 @@ const listShows = async (req, res) => {
       (!theatreId || show.theatre.id === theatreId),
   );
 
-  res.status(200).json({ shows });
+  // Seat counts change with every booking, so they are read fresh instead of being cached.
+  const seatCounts =
+    shows.length === 0
+      ? []
+      : await sequelize.query(
+          `SELECT show_id AS "showId",
+                  count(*)::int AS "totalSeats",
+                  count(*) FILTER (WHERE status = 'available')::int AS "availableSeats"
+             FROM show_seats
+            WHERE show_id IN (:showIds)
+            GROUP BY show_id`,
+          { replacements: { showIds: shows.map((show) => show.id) }, type: "SELECT" },
+        );
+  const countsByShow = new Map(seatCounts.map((count) => [count.showId, count]));
+
+  res.status(200).json({
+    shows: shows.map((show) => ({
+      ...(show.toJSON ? show.toJSON() : show),
+      totalSeats: countsByShow.get(show.id)?.totalSeats ?? 0,
+      availableSeats: countsByShow.get(show.id)?.availableSeats ?? 0,
+    })),
+  });
 };
 
 const duplicateMovie = (res) =>
@@ -309,6 +365,8 @@ const deleteMovie = async (req, res) => {
 
 module.exports = {
   listMovies,
+  listAllMovies,
+  listMyMovies,
   getMovie,
   listShows,
   createMovie,

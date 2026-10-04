@@ -8,7 +8,11 @@ const {
 } = require("../models");
 const { parseId } = require("../utils/validation");
 const { addTicketEmailJob } = require("../queues/ticketEmail");
+const { loadTicket } = require("../utils/ticketEmail");
+const { buildTicketPdf } = require("../utils/ticketPdf");
 const { logger } = require("../utils/logger");
+
+const MAX_SEATS_PER_BOOKING = 10;
 
 class BookingError extends Error {
   constructor(status, message) {
@@ -30,6 +34,12 @@ const createBooking = async (req, res) => {
     return res
       .status(400)
       .json({ message: "showId and a non-empty seats array are required" });
+  }
+
+  if (seats.length > MAX_SEATS_PER_BOOKING) {
+    return res
+      .status(400)
+      .json({ message: `You can book at most ${MAX_SEATS_PER_BOOKING} seats at a time` });
   }
 
   const requestedSeats = seats.map((seat) => seat.trim().toUpperCase());
@@ -126,6 +136,54 @@ const createBooking = async (req, res) => {
   }
 };
 
+const listMyBookings = async (req, res) => {
+  const bookings = await sequelize.query(
+    `SELECT b.id, b.status, b.total_amount::float8 AS "totalAmount", b.created_at AS "createdAt",
+            s.id AS "showId", s.starts_at AS "startsAt", s.cancelled_at AS "showCancelledAt",
+            m.id AS "movieId", m.title AS "movieTitle",
+            t.name AS "theatreName", t.city AS "theatreCity",
+            array_agg(ss.seat_number ORDER BY ss.id) AS seats
+       FROM bookings b
+       JOIN shows s ON s.id = b.show_id
+       JOIN movies m ON m.id = s.movie_id
+       JOIN theatres t ON t.id = s.theatre_id
+       JOIN booking_seats bs ON bs.booking_id = b.id
+       JOIN show_seats ss ON ss.id = bs.show_seat_id
+      WHERE b.user_id = :userId
+      GROUP BY b.id, s.id, m.id, t.id
+      ORDER BY s.starts_at DESC`,
+    { replacements: { userId: req.user.userId }, type: "SELECT" },
+  );
+
+  res.status(200).json({ bookings });
+};
+
+const downloadTicket = async (req, res) => {
+  const bookingId = parseId(req.params.bookingId);
+  if (!bookingId) {
+    return res.status(400).json({ message: "bookingId must be a positive integer" });
+  }
+
+  const booking = await Booking.findByPk(bookingId, { attributes: ["id", "userId", "status"] });
+  // Someone else's booking gets the same answer as a missing one, so ids cannot be probed.
+  if (!booking || booking.userId !== req.user.userId) {
+    return res.status(404).json({ message: "Booking not found" });
+  }
+  if (booking.status === "cancelled") {
+    return res.status(409).json({ message: "This booking was cancelled, so it has no ticket" });
+  }
+
+  const ticket = await loadTicket(booking.id);
+  const pdf = await buildTicketPdf(ticket);
+  res.set({
+    "Content-Type": "application/pdf",
+    "Content-Disposition": `attachment; filename="ticket-${ticket.code}.pdf"`,
+  });
+  res.send(pdf);
+};
+
 module.exports = {
   createBooking,
+  listMyBookings,
+  downloadTicket,
 };
