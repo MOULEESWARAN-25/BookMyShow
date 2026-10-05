@@ -9,16 +9,23 @@ import {
   Filter,
   IndianRupee,
   LayoutGrid,
+  MapPin,
   Percent,
   Receipt,
   Tags,
   Ticket,
   TrendingDown,
+  UserCheck,
+  UserCog,
+  Users,
 } from "lucide-react";
 import {
   getSummary,
+  getSiteSummary,
   rankMovies,
   rankTheatres,
+  rankOwners,
+  rankCities,
   getDaily,
   getShowTimes,
   getGenres,
@@ -28,7 +35,8 @@ import Message from "../../components/Message";
 import MetricsTable from "../../components/MetricsTable";
 import { formatClockTime, formatDate, formatPrice } from "../../utils/format";
 
-const TABS = [
+// A theatre owner runs their own theatres, so they also see when and what to schedule.
+const THEATRE_OWNER_TABS = [
   { key: "summary", title: "Summary", icon: LayoutGrid, load: getSummary },
   { key: "movies", title: "Movies", icon: Clapperboard, load: rankMovies },
   { key: "theatres", title: "Theatres", icon: Building2, load: rankTheatres },
@@ -37,9 +45,21 @@ const TABS = [
   { key: "genres", title: "Genres & languages", icon: Tags, load: getGenres },
 ];
 
-const isRanking = (tab) => tab === "movies" || tab === "theatres";
+// The site owner looks at the whole platform: how big it is and which owners and cities perform.
+const SITE_TABS = [
+  { key: "summary", title: "Summary", icon: LayoutGrid, load: getSiteSummary },
+  { key: "owners", title: "Theatre owners", icon: UserCog, load: rankOwners },
+  { key: "cities", title: "Cities", icon: MapPin, load: rankCities },
+  { key: "theatres", title: "Theatres", icon: Building2, load: rankTheatres },
+  { key: "movies", title: "Movies", icon: Clapperboard, load: rankMovies },
+  { key: "daily", title: "Daily", icon: CalendarDays, load: getDaily },
+];
 
-const Dashboard = () => {
+const RANKING_TABS = ["movies", "theatres", "owners", "cities"];
+const isRanking = (tab) => RANKING_TABS.includes(tab);
+
+const Dashboard = ({ global = false }) => {
+  const TABS = global ? SITE_TABS : THEATRE_OWNER_TABS;
   const [tab, setTab] = useState("summary");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
@@ -88,8 +108,12 @@ const Dashboard = () => {
   return (
     <div>
       <div className="page-header">
-        <h1>Dashboard</h1>
-        <p className="muted">Numbers for your own theatres only. Cancelled shows are not counted.</p>
+        <h1>{global ? "Site analytics" : "Dashboard"}</h1>
+        <p className="muted">
+          {global
+            ? "Numbers for every theatre on the site. Cancelled shows are not counted."
+            : "Numbers for your own theatres only. Cancelled shows are not counted."}
+        </p>
       </div>
 
       <div className="tabs">
@@ -106,18 +130,34 @@ const Dashboard = () => {
 
       <form onSubmit={handleApply} className="search-bar">
         <label className="inline-label">
-          From <input type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          From{" "}
+          <input
+            type="date"
+            value={from}
+            onChange={(event) => setFrom(event.target.value)}
+          />
         </label>
         <label className="inline-label">
-          To <input type="date" value={to} onChange={(event) => setTo(event.target.value)} />
+          To{" "}
+          <input
+            type="date"
+            value={to}
+            onChange={(event) => setTo(event.target.value)}
+          />
         </label>
         {isRanking(tab) && (
           <>
-            <select value={sort} onChange={(event) => setSort(event.target.value)}>
+            <select
+              value={sort}
+              onChange={(event) => setSort(event.target.value)}
+            >
               <option value="most">Most tickets</option>
               <option value="least">Least tickets</option>
             </select>
-            <select value={limit} onChange={(event) => setLimit(event.target.value)}>
+            <select
+              value={limit}
+              onChange={(event) => setLimit(event.target.value)}
+            >
               <option value="5">Top 5</option>
               <option value="10">Top 10</option>
               <option value="50">Top 50</option>
@@ -133,7 +173,26 @@ const Dashboard = () => {
       {loading && <Loading />}
       {!loading && data && (
         <>
-          {tab === "summary" && <Summary summary={data.summary} />}
+          {tab === "summary" &&
+            (global ? <SiteSummary summary={data.summary} /> : <Summary summary={data.summary} />)}
+          {tab === "owners" && (
+            <MetricsTable
+              rows={data.results}
+              labelColumns={[
+                { key: "name", title: "Theatre owner" },
+                { key: "theatres", title: "Theatres" },
+              ]}
+            />
+          )}
+          {tab === "cities" && (
+            <MetricsTable
+              rows={data.results}
+              labelColumns={[
+                { key: "city", title: "City" },
+                { key: "theatres", title: "Theatres" },
+              ]}
+            />
+          )}
           {tab === "movies" && (
             <MetricsTable
               rows={data.results}
@@ -150,29 +209,47 @@ const Dashboard = () => {
               labelColumns={[
                 { key: "name", title: "Theatre" },
                 { key: "city", title: "City" },
+                // A theatre owner's own name on every row would say nothing, so only the site owner sees it.
+                ...(global ? [{ key: "owner", title: "Owner" }] : []),
               ]}
             />
           )}
           {tab === "daily" && (
-            <MetricsTable rows={data.days} labelColumns={[{ key: "date", title: "Date", format: formatDate }]} />
+            <MetricsTable
+              rows={data.days}
+              labelColumns={[
+                { key: "date", title: "Date", format: formatDate },
+              ]}
+            />
           )}
           {tab === "showTimes" && (
             <>
               <h3>By show time</h3>
               <MetricsTable
                 rows={data.byShowTime}
-                labelColumns={[{ key: "showTime", title: "Time", format: formatClockTime }]}
+                labelColumns={[
+                  { key: "showTime", title: "Time", format: formatClockTime },
+                ]}
               />
               <h3>By day of the week</h3>
-              <MetricsTable rows={data.byWeekday} labelColumns={[{ key: "weekday", title: "Day" }]} />
+              <MetricsTable
+                rows={data.byWeekday}
+                labelColumns={[{ key: "weekday", title: "Day" }]}
+              />
             </>
           )}
           {tab === "genres" && (
             <>
               <h3>By genre</h3>
-              <MetricsTable rows={data.byGenre} labelColumns={[{ key: "genre", title: "Genre" }]} />
+              <MetricsTable
+                rows={data.byGenre}
+                labelColumns={[{ key: "genre", title: "Genre" }]}
+              />
               <h3>By language</h3>
-              <MetricsTable rows={data.byLanguage} labelColumns={[{ key: "language", title: "Language" }]} />
+              <MetricsTable
+                rows={data.byLanguage}
+                labelColumns={[{ key: "language", title: "Language" }]}
+              />
             </>
           )}
         </>
@@ -180,6 +257,38 @@ const Dashboard = () => {
     </div>
   );
 };
+
+const SummaryCards = ({ items }) => (
+  <div className="summary-grid">
+    {items.map(([label, value, Icon]) => (
+      <div key={label} className="summary-item">
+        <div className="summary-label">
+          <span className="muted">{label}</span>
+          <span className="summary-icon">
+            <Icon />
+          </span>
+        </div>
+        <div className="summary-value">{value}</div>
+      </div>
+    ))}
+  </div>
+);
+
+// Customers, owners and theatres are the platform's size today; the rest follow the chosen dates.
+const SiteSummary = ({ summary }) => (
+  <SummaryCards
+    items={[
+      ["Revenue", formatPrice(summary.revenue), IndianRupee],
+      ["Bookings", summary.bookings, Receipt],
+      ["Tickets sold", summary.tickets, Ticket],
+      ["Occupancy", `${summary.occupancyPercent}%`, Percent],
+      ["Customers who booked", summary.customersWhoBooked, UserCheck],
+      ["Registered customers", summary.registeredCustomers, Users],
+      ["Theatre owners", summary.theatreOwners, UserCog],
+      ["Theatres", summary.theatres, Building2],
+    ]}
+  />
+);
 
 const Summary = ({ summary }) => {
   const items = [
@@ -189,25 +298,11 @@ const Summary = ({ summary }) => {
     ["Occupancy", `${summary.occupancyPercent}%`, Percent],
     ["Shows", summary.shows, Clapperboard],
     ["Upcoming shows", summary.upcomingShows, CalendarClock],
-    ["Cancellations", summary.cancellations, CircleX],
+    ["Cancelled bookings", summary.cancellations, CircleX],
     ["Cancellation rate", `${summary.cancellationRatePercent}%`, TrendingDown],
   ];
 
-  return (
-    <div className="summary-grid">
-      {items.map(([label, value, Icon]) => (
-        <div key={label} className="summary-item">
-          <div className="summary-label">
-            <span className="muted">{label}</span>
-            <span className="summary-icon">
-              <Icon />
-            </span>
-          </div>
-          <div className="summary-value">{value}</div>
-        </div>
-      ))}
-    </div>
-  );
+  return <SummaryCards items={items} />;
 };
 
 export default Dashboard;

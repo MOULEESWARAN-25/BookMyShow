@@ -1,11 +1,21 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { Building2, Clapperboard, Languages, MapPin, Search, Tag, X } from "lucide-react";
+import {
+  Building2,
+  Clapperboard,
+  Languages,
+  MapPin,
+  Search,
+  Tag,
+  X,
+} from "lucide-react";
 import { listMovies } from "../api/movie";
 import FilterSelect from "../components/FilterSelect";
 import Message from "../components/Message";
 import MovieMeta from "../components/MovieMeta";
 import { toOptions } from "../utils/group";
+
+const SEARCH_DELAY_MS = 400;
 
 const MovieList = () => {
   // Search and filters live in the URL (/?search=leo&city=Chennai), so Back and shared links keep them.
@@ -47,22 +57,38 @@ const MovieList = () => {
     };
   }, [searchQuery]);
 
-  // Changes some values in the URL and keeps the others.
-  const updateParams = (changes) => {
-    const params = new URLSearchParams(searchParams);
-    for (const [name, value] of Object.entries(changes)) {
-      if (value) {
-        params.set(name, value);
-      } else {
-        params.delete(name);
+  // Changes some values in the URL and keeps the others. It starts from the current URL
+  // (current), so a search that fires late does not undo a filter picked in the meantime.
+  const updateParams = (changes, options) => {
+    setSearchParams((current) => {
+      const params = new URLSearchParams(current);
+      for (const [name, value] of Object.entries(changes)) {
+        if (value) {
+          params.set(name, value);
+        } else {
+          params.delete(name);
+        }
       }
-    }
-    setSearchParams(params);
+      return params;
+    }, options);
   };
 
+  // Search while typing: every key press restarts the timer, so the search runs once the user pauses.
+  // replace: true keeps each half-typed word out of the browser's Back history.
+  useEffect(() => {
+    if (search.trim() === searchQuery) return;
+
+    const timer = setTimeout(
+      () => updateParams({ search: search.trim() }, { replace: true }),
+      SEARCH_DELAY_MS,
+    );
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  // Pressing Enter searches straight away instead of waiting for the timer.
   const handleSearch = (event) => {
     event.preventDefault();
-    updateParams({ search: search.trim() });
+    updateParams({ search: search.trim() }, { replace: true });
   };
 
   const clearAll = () => {
@@ -74,14 +100,15 @@ const MovieList = () => {
   const visibleMovies = movies.filter(
     (movie) =>
       (!city || movie.cities.includes(city)) &&
-      (!theatreId || movie.theatres.some((theatre) => theatre.id === Number(theatreId))) &&
+      (!theatreId ||
+        movie.theatres.some((theatre) => theatre.id === Number(theatreId))) &&
       (!language || movie.language === language) &&
       (!genre || movie.genre === genre),
   );
-  const isFiltered = Boolean(searchQuery || city || theatreId || language || genre);
+  const isFiltered = Boolean(
+    searchQuery || city || theatreId || language || genre,
+  );
 
-  // Every theatre showing any of the loaded movies, only from the chosen city once one is picked.
-  // Without a city, the city is added to the name, because two cities can have a theatre with the same name.
   const theatres = new Map();
   for (const theatre of movies.flatMap((movie) => movie.theatres)) {
     if (!city || theatre.city === city) {
@@ -113,7 +140,6 @@ const MovieList = () => {
               onChange={(event) => setSearch(event.target.value)}
             />
           </label>
-          <button type="submit">Search</button>
         </form>
 
         <div className="filters">
@@ -122,7 +148,11 @@ const MovieList = () => {
             label="City"
             allLabel="All cities"
             value={city}
-            options={toOptions([...movies.flatMap((movie) => movie.cities), city].filter(Boolean))}
+            options={toOptions(
+              [...movies.flatMap((movie) => movie.cities), city].filter(
+                Boolean,
+              ),
+            )}
             onChange={(value) => updateParams({ city: value, theatre: "" })}
           />
           <FilterSelect
@@ -138,7 +168,11 @@ const MovieList = () => {
             label="Language"
             allLabel="All languages"
             value={language}
-            options={toOptions([...movies.map((movie) => movie.language), language].filter(Boolean))}
+            options={toOptions(
+              [...movies.map((movie) => movie.language), language].filter(
+                Boolean,
+              ),
+            )}
             onChange={(value) => updateParams({ language: value })}
           />
           <FilterSelect
@@ -146,7 +180,9 @@ const MovieList = () => {
             label="Genre"
             allLabel="All genres"
             value={genre}
-            options={toOptions([...movies.map((movie) => movie.genre), genre].filter(Boolean))}
+            options={toOptions(
+              [...movies.map((movie) => movie.genre), genre].filter(Boolean),
+            )}
             onChange={(value) => updateParams({ genre: value })}
           />
           {isFiltered && (
@@ -179,14 +215,22 @@ const MovieList = () => {
       {!loading && !error && visibleMovies.length === 0 && (
         <div className="empty-state">
           <Clapperboard />
-          <p>{isFiltered ? "No movies match your search and filters." : "No movies are showing right now."}</p>
+          <p>
+            {isFiltered
+              ? "No movies match your search and filters."
+              : "No movies are showing right now."}
+          </p>
         </div>
       )}
 
       {!loading && visibleMovies.length > 0 && (
         <div className="movie-grid">
           {visibleMovies.map((movie) => (
-            <Link key={movie.id} to={`/movies/${movie.id}`} className="movie-card">
+            <Link
+              key={movie.id}
+              to={`/movies/${movie.id}`}
+              className="movie-card"
+            >
               <h3>{movie.title}</h3>
               <MovieMeta movie={movie} showRelease={false} />
               <p className="movie-cities">

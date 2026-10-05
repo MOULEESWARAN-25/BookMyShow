@@ -1,7 +1,8 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { homeFor } from "../utils/roles";
 
-// Works like the requireAdmin middleware on the backend, but for pages.
+// Works like the role middleware on the backend, but for pages.
 const RequireRole = ({ role }) => {
   const { user } = useAuth();
   const location = useLocation();
@@ -10,8 +11,9 @@ const RequireRole = ({ role }) => {
   if (!user) {
     return <Navigate to="/login" state={{ from: location.pathname }} replace />;
   }
+  // The wrong kind of account goes to its own start page.
   if (user.role !== role) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={homeFor(user.role)} replace />;
   }
   return <Outlet />;
 };

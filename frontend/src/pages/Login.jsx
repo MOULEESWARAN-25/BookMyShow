@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { LockKeyhole, LogIn, Mail } from "lucide-react";
 import { useAuth } from "../context/AuthContext";
+import { homeFor } from "../utils/roles";
 import Message from "../components/Message";
 
 const Login = () => {
@@ -30,8 +31,13 @@ const Login = () => {
   // One redirect for both cases: just logged in, or opened the login page while logged in.
   // "from" is where they came from, and returnState what they were doing, such as chosen seats.
   if (user) {
-    const home = user.role === "admin" ? "/admin" : "/";
-    return <Navigate to={location.state?.from ?? home} state={location.state?.returnState} replace />;
+    return (
+      <Navigate
+        to={location.state?.from ?? homeFor(user.role)}
+        state={location.state?.returnState}
+        replace
+      />
+    );
   }
 
   return (

@@ -141,6 +141,8 @@ const BookSeats = () => {
   }
 
   const totalAmount = show.price * selectedSeats.length;
+  // Theatre owners and the site owner can look at the seats, but only customers book.
+  const canOnlyView = user && user.role !== "user";
 
   return (
     <div>
@@ -183,13 +185,13 @@ const BookSeats = () => {
       {/* Admins can look at the seats but cannot book them. */}
       <SeatMap
         seats={seats}
-        selectedSeats={user?.role === "admin" ? undefined : selectedSeats}
-        onSeatClick={user?.role === "admin" ? null : toggleSeat}
+        selectedSeats={canOnlyView ? undefined : selectedSeats}
+        onSeatClick={canOnlyView ? null : toggleSeat}
       />
 
       <div className="booking-bar">
         <div>
-          {user?.role === "admin"
+          {canOnlyView
             ? `${seats.filter((seat) => seat.status === "available").length} of ${seats.length} seats available`
             : selectedSeats.length === 0
               ? "Select seats to book"
@@ -208,7 +210,7 @@ const BookSeats = () => {
             <LogIn /> Login to book
           </Link>
         )}
-        {user?.role === "admin" && <span className="muted">Admins cannot book tickets</span>}
+        {canOnlyView && <span className="muted">Only customers can book tickets</span>}
         {user?.role === "user" && (
           <button onClick={handleBook} disabled={selectedSeats.length === 0 || submitting}>
             <Ticket /> {submitting ? "Booking..." : "Book seats"}

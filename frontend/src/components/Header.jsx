@@ -6,6 +6,7 @@ import {
   Clapperboard,
   Film,
   LayoutDashboard,
+  ShieldCheck,
   LogIn,
   LogOut,
   Menu,
@@ -82,14 +83,28 @@ const Header = () => {
               </NavLink>
             </>
           )}
+          {user?.role === "super_admin" && (
+            <>
+              <NavLink to="/super-admin" end>
+                <ShieldCheck /> Owner panel
+              </NavLink>
+              <NavLink to="/super-admin/analytics">
+                <LayoutDashboard /> Site analytics
+              </NavLink>
+            </>
+          )}
         </nav>
 
         <div className="nav">
           <button
             className="icon-button"
             onClick={toggleTheme}
-            title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
-            aria-label={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
+            title={
+              theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            }
+            aria-label={
+              theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            }
           >
             {theme === "dark" ? <Sun /> : <Moon />}
           </button>
@@ -97,7 +112,11 @@ const Header = () => {
             <>
               <span className="user-name">
                 <CircleUserRound /> {user.name}
-                {user.role === "admin" && <span className="role">Admin</span>}
+                {(user.role === "admin" || user.role === "super_admin") && (
+                  <span className="role">
+                    {user.role === "super_admin" ? "Owner" : "Admin"}
+                  </span>
+                )}
               </span>
               <button className="secondary" onClick={handleLogout}>
                 <LogOut /> Logout

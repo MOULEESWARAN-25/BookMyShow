@@ -18,6 +18,7 @@ const Dashboard = lazy(() => import("./pages/admin/Dashboard"));
 const Theatres = lazy(() => import("./pages/admin/Theatres"));
 const TheatreShows = lazy(() => import("./pages/admin/TheatreShows"));
 const Movies = lazy(() => import("./pages/admin/Movies"));
+const SuperAdmin = lazy(() => import("./pages/super-admin/SuperAdmin"));
 
 const App = () => {
   const location = useLocation();
@@ -32,7 +33,10 @@ const App = () => {
             <Routes>
               <Route path="/" element={<MovieList />} />
               <Route path="/movies/:movieId" element={<MovieDetails />} />
-              <Route path="/movies/:movieId/shows/:showId" element={<BookSeats />} />
+              <Route
+                path="/movies/:movieId/shows/:showId"
+                element={<BookSeats />}
+              />
               <Route path="/login" element={<Login />} />
               <Route path="/signup" element={<Signup />} />
 
@@ -43,8 +47,16 @@ const App = () => {
               <Route element={<RequireRole role="admin" />}>
                 <Route path="/admin" element={<Dashboard />} />
                 <Route path="/admin/theatres" element={<Theatres />} />
-                <Route path="/admin/theatres/:theatreId" element={<TheatreShows />} />
+                <Route
+                  path="/admin/theatres/:theatreId"
+                  element={<TheatreShows />}
+                />
                 <Route path="/admin/movies" element={<Movies />} />
+              </Route>
+
+              <Route element={<RequireRole role="super_admin" />}>
+                <Route path="/super-admin" element={<SuperAdmin />} />
+                <Route path="/super-admin/analytics" element={<Dashboard global />} />
               </Route>
 
               <Route path="*" element={<NotFound />} />
