@@ -1,13 +1,14 @@
 const express = require("express");
-const authMiddleware = require("../middleware/auth");
-const blockAdmin = require("../middleware/blockAdmin");
+const requireRole = require("../middleware/requireRole");
 const idempotency = require("../middleware/idempotency");
 const { createBooking, listMyBookings, downloadTicket } = require("../controllers/booking");
 
 const router = express.Router();
 
-router.post("/", authMiddleware, blockAdmin, idempotency("booking"), createBooking);
-router.get("/mine", authMiddleware, blockAdmin, listMyBookings);
-router.get("/:bookingId/ticket", authMiddleware, blockAdmin, downloadTicket);
+const requireCustomer = requireRole("user");
+
+router.post("/", requireCustomer, idempotency("booking"), createBooking);
+router.get("/mine", requireCustomer, listMyBookings);
+router.get("/:bookingId/ticket", requireCustomer, downloadTicket);
 
 module.exports = router;

@@ -1,9 +1,12 @@
 const express = require("express");
-const requireAdmin = require("../middleware/admin");
+const requireRole = require("../middleware/requireRole");
 const {
   getSummary,
+  getSiteSummary,
   rankMovies,
   rankTheatres,
+  rankOwners,
+  rankCities,
   getDaily,
   getShowTimes,
   getGenres,
@@ -11,13 +14,21 @@ const {
 
 const router = express.Router();
 
-router.use(requireAdmin);
+const theatreOwner = requireRole("admin");
+const siteOwner = requireRole("super_admin");
+const either = requireRole("admin", "super_admin");
 
-router.get("/summary", getSummary);
-router.get("/movies", rankMovies);
-router.get("/theatres", rankTheatres);
-router.get("/daily", getDaily);
-router.get("/show-times", getShowTimes);
-router.get("/genres", getGenres);
+// Theatre owners only ever see their own theatres; the site owner sees every theatre.
+router.get("/summary", theatreOwner, getSummary);
+router.get("/show-times", theatreOwner, getShowTimes);
+router.get("/genres", theatreOwner, getGenres);
+
+router.get("/site-summary", siteOwner, getSiteSummary);
+router.get("/owners", siteOwner, rankOwners);
+router.get("/cities", siteOwner, rankCities);
+
+router.get("/movies", either, rankMovies);
+router.get("/theatres", either, rankTheatres);
+router.get("/daily", either, getDaily);
 
 module.exports = router;

@@ -11,7 +11,7 @@ const User = sequelize.define(
       type: DataTypes.TEXT,
       allowNull: false,
       defaultValue: "user",
-      validate: { isIn: [["user", "admin"]] },
+      validate: { isIn: [["user", "admin", "super_admin"]] },
     },
     createdAt: {
       type: DataTypes.DATE,

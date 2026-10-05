@@ -73,7 +73,7 @@ const runQuery = (req, filters, selectSql, extraReplacements = {}) => {
         FROM shows s
         JOIN theatres t ON t.id = s.theatre_id
         JOIN show_seats ss ON ss.show_id = s.id
-       WHERE t.admin_id = :adminId
+      WHERE (:isSuperAdmin OR t.admin_id = :adminId)
          AND s.cancelled_at IS NULL
          ${dateFilters.join("\n         ")}
        GROUP BY s.id
@@ -93,7 +93,7 @@ const runQuery = (req, filters, selectSql, extraReplacements = {}) => {
         FROM bookings b
         JOIN shows s ON s.id = b.show_id
         JOIN theatres t ON t.id = s.theatre_id
-       WHERE t.admin_id = :adminId
+      WHERE (:isSuperAdmin OR t.admin_id = :adminId)
          AND b.status = 'cancelled'
          ${dateFilters.join("\n         ")}
     )
@@ -102,6 +102,7 @@ const runQuery = (req, filters, selectSql, extraReplacements = {}) => {
   return sequelize.query(sql, {
     replacements: {
       adminId: req.user.userId,
+      isSuperAdmin: req.user.role === "super_admin",
       timezone: TIMEZONE,
       from: filters.from,
       to: filters.to,
@@ -161,10 +162,46 @@ const rankMovies = rankBy(
 );
 
 const rankTheatres = rankBy(
-  "JOIN theatres t ON t.id = st.theatre_id GROUP BY t.id",
-  "t.id, t.name, t.city",
+  "JOIN theatres t ON t.id = st.theatre_id JOIN users u ON u.id = t.admin_id GROUP BY t.id, u.name",
+  "t.id, t.name, t.city, u.name AS owner",
   "t.name",
 );
+
+// The two rankings below are for the site owner, who looks across every theatre owner.
+const rankOwners = rankBy(
+  "JOIN theatres t ON t.id = st.theatre_id JOIN users u ON u.id = t.admin_id GROUP BY u.id",
+  "u.id, u.name, count(DISTINCT t.id)::int AS theatres",
+  "u.name",
+);
+
+const rankCities = rankBy(
+  "JOIN theatres t ON t.id = st.theatre_id GROUP BY t.city",
+  "t.city, count(DISTINCT t.id)::int AS theatres",
+  "t.city",
+);
+
+// The site owner's summary: money and seats for the chosen dates, plus how big the platform is.
+const getSiteSummary = async (req, res) => {
+  const filters = parseFilters(req.query);
+  if (filters.error) {
+    return res.status(400).json({ message: filters.error });
+  }
+
+  const [summary] = await runQuery(
+    req,
+    filters,
+    `SELECT ${METRICS},
+            (SELECT count(DISTINCT b.user_id) FROM bookings b
+              WHERE b.status = 'confirmed' AND b.show_id IN (SELECT id FROM show_stats))::int AS "customersWhoBooked",
+            (SELECT count(*) FROM users WHERE role = 'user')::int AS "registeredCustomers",
+            (SELECT count(*) FROM users WHERE role = 'admin')::int AS "theatreOwners",
+            (SELECT count(*) FROM theatres)::int AS theatres
+       FROM show_stats st
+       LEFT JOIN show_bookings sb ON sb.show_id = st.id`,
+  );
+
+  res.json({ summary });
+};
 
 const getDaily = async (req, res) => {
   const filters = parseFilters(req.query);
@@ -243,8 +280,11 @@ const getGenres = async (req, res) => {
 
 module.exports = {
   getSummary,
+  getSiteSummary,
   rankMovies,
   rankTheatres,
+  rankOwners,
+  rankCities,
   getDaily,
   getShowTimes,
   getGenres,

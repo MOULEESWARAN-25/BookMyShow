@@ -15,6 +15,7 @@ const movieRoutes = require("./routes/movie");
 const showRoutes = require("./routes/show");
 const theatreRoutes = require("./routes/theatre");
 const trackingRoutes = require("./routes/tracking");
+const superAdminRoutes = require("./routes/superAdmin");
 const queueDashboard = require("./queues/dashboard");
 const app = express();
 
@@ -44,6 +45,7 @@ app.use(
 app.use(express.json());
 
 app.use("/api/analytics", analyticsRoutes);
+app.use("/api/super-admin", superAdminRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/movies", movieRoutes);

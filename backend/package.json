@@ -25,7 +25,7 @@
   },
   "scripts": {
     "dev": "nodemon server.js",
-    "create-admin": "node db/createAdmin.js",
+    "create-super-admin": "node db/createSuperAdmin.js",
     "migrate": "sequelize-cli db:migrate",
     "migrate:undo": "sequelize-cli db:migrate:undo",
     "migrate:status": "sequelize-cli db:migrate:status",

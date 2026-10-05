@@ -1,3 +1,3 @@
 const requireRole = require("./requireRole");
 
-module.exports = requireRole("admin");
+module.exports = requireRole("super_admin");

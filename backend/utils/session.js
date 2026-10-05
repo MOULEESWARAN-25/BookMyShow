@@ -25,7 +25,9 @@ const createSession = async (userId, token) => {
     transaction.zRem(userKey, tokensToEvict);
     evictedCount = tokensToEvict.length;
   }
-  transaction.set(sessionKey(token), String(userId), { EX: SESSION_TTL_SECONDS });
+  transaction.set(sessionKey(token), String(userId), {
+    EX: SESSION_TTL_SECONDS,
+  });
   transaction.zAdd(userKey, {
     score: now + SESSION_TTL_SECONDS * 1000,
     value: token,
@@ -58,9 +60,20 @@ const deleteSession = async (userId, token) => {
   redisLogger.info(`Session deleted for user ${userId} (logout)`);
 };
 
+const deleteAllSessions = async (userId) => {
+  const tokens = await redis.zRange(userSessionsKey(userId), 0, -1);
+  const transaction = redis.multi().del(userSessionsKey(userId));
+  if (tokens.length > 0) {
+    transaction.del(tokens.map(sessionKey));
+  }
+  await transaction.exec();
+  redisLogger.info(`All sessions deleted for user ${userId}`);
+};
+
 module.exports = {
   SESSION_TTL_SECONDS,
   createSession,
   getSessionUserId,
   deleteSession,
+  deleteAllSessions,
 };

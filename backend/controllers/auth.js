@@ -6,18 +6,19 @@ const { User } = require("../models");
 const redis = require("../db/redis");
 const { redisLogger } = require("../utils/logger");
 const {
+  EMAIL_REGEX,
+  PASSWORD_REGEX,
+  PASSWORD_RULE,
+  normalizeEmail,
+} = require("../utils/validation");
+const {
   SESSION_TTL_SECONDS,
   createSession,
   deleteSession,
 } = require("../utils/session");
 
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const PASSWORD_REGEX = /^(?=.*[A-Za-z])(?=.*\d).{8,}$/;
 const MAX_FAILED_LOGINS = 5;
 const FAILED_LOGIN_WINDOW_SECONDS = 15 * 60;
-
-const normalizeEmail = (email) =>
-  typeof email === "string" ? email.trim().toLowerCase() : "";
 
 const signup = async (req, res) => {
   const { name, password } = req.body || {};
@@ -41,10 +42,7 @@ const signup = async (req, res) => {
   }
 
   if (!PASSWORD_REGEX.test(password)) {
-    return res.status(400).json({
-      message:
-        "Password must be at least 8 characters long and contain at least one letter and one number",
-    });
+    return res.status(400).json({ message: PASSWORD_RULE });
   }
 
   const hashedPassword = await bcrypt.hash(password, 10);
