@@ -12,7 +12,7 @@ const {
   normalizeEmail,
 } = require("../utils/validation");
 const {
-  SESSION_TTL_SECONDS,
+  SESSION_MAX_SECONDS,
   createSession,
   deleteSession,
 } = require("../utils/session");
@@ -107,7 +107,8 @@ const login = async (req, res) => {
       role: user.role,
     },
     process.env.JWT_SECRET,
-    { expiresIn: SESSION_TTL_SECONDS, jwtid: crypto.randomUUID() },
+    // The token's own expiry is the 12-hour maximum; the 30 idle minutes are tracked in Redis.
+    { expiresIn: SESSION_MAX_SECONDS, jwtid: crypto.randomUUID() },
   );
 
   await createSession(user.id, token);

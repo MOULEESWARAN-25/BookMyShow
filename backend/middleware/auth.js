@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { User } = require("../models");
-const { getSessionUserId } = require("../utils/session");
+const { getSessionUserId, touchSession } = require("../utils/session");
 
 const authMiddleware = async (req, res, next) => {
   const authHeader = req.get("Authorization");
@@ -37,6 +37,9 @@ const authMiddleware = async (req, res, next) => {
     if (!user) {
       return res.status(401).json({ message: "User no longer exists" });
     }
+
+    // Any logged-in request counts as activity, so the idle timer restarts.
+    await touchSession(user.id, token);
 
     req.user = { userId: user.id, role: user.role };
     req.token = token;

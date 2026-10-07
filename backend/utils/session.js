@@ -1,7 +1,10 @@
 const redis = require("../db/redis");
 const { redisLogger } = require("./logger");
 
-const SESSION_TTL_SECONDS = 30 * 60;
+// Two limits: a session ends after 30 minutes without any request (idle), and in any case
+// 12 hours after login (max), so a stolen token cannot be kept alive forever by using it.
+const SESSION_IDLE_SECONDS = 30 * 60;
+const SESSION_MAX_SECONDS = 12 * 60 * 60;
 const MAX_ACTIVE_SESSIONS = 3;
 
 const sessionKey = (token) => `session:${token}`;
@@ -26,13 +29,13 @@ const createSession = async (userId, token) => {
     evictedCount = tokensToEvict.length;
   }
   transaction.set(sessionKey(token), String(userId), {
-    EX: SESSION_TTL_SECONDS,
+    EX: SESSION_IDLE_SECONDS,
   });
   transaction.zAdd(userKey, {
-    score: now + SESSION_TTL_SECONDS * 1000,
+    score: now + SESSION_IDLE_SECONDS * 1000,
     value: token,
   });
-  transaction.expire(userKey, SESSION_TTL_SECONDS);
+  transaction.expire(userKey, SESSION_IDLE_SECONDS);
   await transaction.exec();
 
   const activeCount = activeTokens.length - evictedCount + 1;
@@ -49,6 +52,18 @@ const createSession = async (userId, token) => {
 const getSessionUserId = async (token) => {
   const userId = await redis.get(sessionKey(token));
   return userId === null ? null : Number(userId);
+};
+
+// Called on every logged-in request: the user is active, so the 30 idle minutes start again.
+// XX only updates a session that is still listed, so a request racing a logout cannot bring it back.
+const touchSession = async (userId, token) => {
+  const userKey = userSessionsKey(userId);
+  await redis
+    .multi()
+    .expire(sessionKey(token), SESSION_IDLE_SECONDS)
+    .zAdd(userKey, { score: Date.now() + SESSION_IDLE_SECONDS * 1000, value: token }, { XX: true })
+    .expire(userKey, SESSION_IDLE_SECONDS)
+    .exec();
 };
 
 const deleteSession = async (userId, token) => {
@@ -71,9 +86,11 @@ const deleteAllSessions = async (userId) => {
 };
 
 module.exports = {
-  SESSION_TTL_SECONDS,
+  SESSION_IDLE_SECONDS,
+  SESSION_MAX_SECONDS,
   createSession,
   getSessionUserId,
+  touchSession,
   deleteSession,
   deleteAllSessions,
 };

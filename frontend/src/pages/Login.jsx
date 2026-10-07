@@ -5,6 +5,10 @@ import { useAuth } from "../context/AuthContext";
 import { homeFor } from "../utils/roles";
 import Message from "../components/Message";
 
+// After an expired session the page comes back in the URL (?from=/movies/1). Only paths inside
+// this site are allowed, so a link cannot send people to another website after they log in.
+const returnPage = (from) => (from?.startsWith("/") && !from.startsWith("//") ? from : null);
+
 const Login = () => {
   const { user, login } = useAuth();
   const location = useLocation();
@@ -33,7 +37,7 @@ const Login = () => {
   if (user) {
     return (
       <Navigate
-        to={location.state?.from ?? homeFor(user.role)}
+        to={location.state?.from ?? returnPage(searchParams.get("from")) ?? homeFor(user.role)}
         state={location.state?.returnState}
         replace
       />

@@ -23,7 +23,9 @@ const send = async (path, { method = "GET", body, headers = {} } = {}) => {
 
   if (response.status === 401 && token) {
     clearSession();
-    window.location.href = "/login?expired=true";
+    // Remember the page, so after logging in again the user comes back to it.
+    const page = window.location.pathname + window.location.search;
+    window.location.href = `/login?expired=true&from=${encodeURIComponent(page)}`;
   }
 
   if (!response.ok) {
