@@ -19,6 +19,14 @@ const toDateKey = (value) => {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
 };
 
+// Short numbers for chart axes: 330000 => "3.3L", 4500 => "4.5K".
+const formatCompact = (value) =>
+  Number(value).toLocaleString("en-IN", { notation: "compact", maximumFractionDigits: 1 });
+
+// "2026-10-05" => "5 Oct", for chart axis labels.
+const formatShortDate = (value) =>
+  new Date(`${value}T00:00:00`).toLocaleDateString("en-IN", { day: "numeric", month: "short" });
+
 // <input type="datetime-local"> needs "YYYY-MM-DDTHH:mm" in local time, not an ISO string.
 const toDateTimeInput = (value) => {
   const date = new Date(value);
@@ -37,6 +45,8 @@ export {
   formatTime,
   formatClockTime,
   formatPrice,
+  formatCompact,
+  formatShortDate,
   toDateKey,
   toDateTimeInput,
   splitSeatNumber,

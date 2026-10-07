@@ -2,6 +2,9 @@ import { request, toQuery } from "./client";
 
 const getSummary = (filters) => request(`/analytics/summary${toQuery(filters)}`);
 
+// Always the next few days, whatever dates are chosen.
+const getSlowShows = () => request("/analytics/slow-shows");
+
 const rankMovies = (filters) => request(`/analytics/movies${toQuery(filters)}`);
 
 const rankTheatres = (filters) => request(`/analytics/theatres${toQuery(filters)}`);
@@ -21,6 +24,7 @@ const getGenres = (filters) => request(`/analytics/genres${toQuery(filters)}`);
 
 export {
   getSummary,
+  getSlowShows,
   getSiteSummary,
   rankMovies,
   rankTheatres,

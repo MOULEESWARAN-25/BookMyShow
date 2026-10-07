@@ -3,8 +3,8 @@ const { sequelize } = require("../models");
 
 const TIMEZONE = "Asia/Kolkata";
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
-const DEFAULT_LIMIT = 5;
-const MAX_LIMIT = 50;
+const SLOW_SHOWS_LIMIT = 5;
+const SLOW_SHOWS_DAYS = 3;
 
 const METRICS = `
   count(st.id)::int AS shows,
@@ -31,25 +31,6 @@ const parseFilters = (query) => {
   }
 
   return { from, to };
-};
-
-const parseRanking = (query) => {
-  const { sort = "most", limit = String(DEFAULT_LIMIT) } = query;
-
-  if (!["most", "least"].includes(sort)) {
-    return { error: "sort must be most or least" };
-  }
-
-  const numericLimit = Number(limit);
-  if (
-    !Number.isInteger(numericLimit) ||
-    numericLimit < 1 ||
-    numericLimit > MAX_LIMIT
-  ) {
-    return { error: `limit must be an integer between 1 and ${MAX_LIMIT}` };
-  }
-
-  return { direction: sort === "most" ? "DESC" : "ASC", limit: numericLimit };
 };
 
 const runQuery = (req, filters, selectSql, extraReplacements = {}) => {
@@ -85,17 +66,6 @@ const runQuery = (req, filters, selectSql, extraReplacements = {}) => {
         FROM bookings b
        WHERE b.show_id IN (SELECT id FROM show_stats)
        GROUP BY b.show_id
-    ),
-    -- Bookings are only cancelled when a show is cancelled, and show_stats leaves cancelled
-    -- shows out, so cancelled bookings are counted over all of the owner's shows here.
-    cancelled_bookings AS (
-      SELECT count(*) AS cancellations
-        FROM bookings b
-        JOIN shows s ON s.id = b.show_id
-        JOIN theatres t ON t.id = s.theatre_id
-      WHERE (:isSuperAdmin OR t.admin_id = :adminId)
-         AND b.status = 'cancelled'
-         ${dateFilters.join("\n         ")}
     )
     ${selectSql}`;
 
@@ -121,10 +91,7 @@ const getSummary = async (req, res) => {
   const [summary] = await runQuery(
     req,
     filters,
-    `SELECT ${METRICS},
-            count(st.id) FILTER (WHERE st.starts_at > now())::int AS "upcomingShows",
-            (SELECT cancellations FROM cancelled_bookings)::int AS cancellations,
-            coalesce(round(100.0 * (SELECT cancellations FROM cancelled_bookings) / nullif(coalesce(sum(sb.bookings), 0) + (SELECT cancellations FROM cancelled_bookings), 0), 1), 0)::float8 AS "cancellationRatePercent"
+    `SELECT ${METRICS}
        FROM show_stats st
        LEFT JOIN show_bookings sb ON sb.show_id = st.id`,
   );
@@ -132,12 +99,34 @@ const getSummary = async (req, res) => {
   res.json({ summary });
 };
 
+// Shows in the next few days with the emptiest seats, so a theatre owner knows which ones to promote.
+// Shows further ahead are left out: they have simply not had time to sell yet.
+// It is a warning about the coming days, so the chosen dates do not apply.
+const getSlowShows = async (req, res) => {
+  const shows = await runQuery(
+    req,
+    {},
+    `SELECT st.id, st.starts_at AS "startsAt", m.title AS movie, t.name AS theatre,
+            st.tickets, st.capacity,
+            coalesce(round(100.0 * st.tickets / nullif(st.capacity, 0), 1), 0)::float8 AS "occupancyPercent"
+       FROM show_stats st
+       JOIN movies m ON m.id = st.movie_id
+       JOIN theatres t ON t.id = st.theatre_id
+      WHERE st.starts_at > now()
+        AND st.starts_at < now() + make_interval(days => :days)
+      ORDER BY "occupancyPercent" ASC, st.starts_at ASC
+      LIMIT :limit`,
+    { limit: SLOW_SHOWS_LIMIT, days: SLOW_SHOWS_DAYS },
+  );
+
+  res.json({ shows });
+};
+
+// Every ranking lists all rows, best revenue first.
 const rankBy = (groupSql, selectColumns, orderColumn) => async (req, res) => {
   const filters = parseFilters(req.query);
-  const ranking = parseRanking(req.query);
-  const error = filters.error || ranking.error;
-  if (error) {
-    return res.status(400).json({ message: error });
+  if (filters.error) {
+    return res.status(400).json({ message: filters.error });
   }
 
   const results = await runQuery(
@@ -147,9 +136,7 @@ const rankBy = (groupSql, selectColumns, orderColumn) => async (req, res) => {
        FROM show_stats st
        LEFT JOIN show_bookings sb ON sb.show_id = st.id
        ${groupSql}
-      ORDER BY tickets ${ranking.direction}, ${orderColumn} ASC
-      LIMIT :limit`,
-    { limit: ranking.limit },
+      ORDER BY revenue DESC, ${orderColumn} ASC`,
   );
 
   res.json({ results });
@@ -162,8 +149,8 @@ const rankMovies = rankBy(
 );
 
 const rankTheatres = rankBy(
-  "JOIN theatres t ON t.id = st.theatre_id JOIN users u ON u.id = t.admin_id GROUP BY t.id, u.name",
-  "t.id, t.name, t.city, u.name AS owner",
+  "JOIN theatres t ON t.id = st.theatre_id GROUP BY t.id",
+  "t.id, t.name, t.city",
   "t.name",
 );
 
@@ -195,7 +182,8 @@ const getSiteSummary = async (req, res) => {
               WHERE b.status = 'confirmed' AND b.show_id IN (SELECT id FROM show_stats))::int AS "customersWhoBooked",
             (SELECT count(*) FROM users WHERE role = 'user')::int AS "registeredCustomers",
             (SELECT count(*) FROM users WHERE role = 'admin')::int AS "theatreOwners",
-            (SELECT count(*) FROM theatres)::int AS theatres
+            (SELECT count(*) FROM theatres)::int AS theatres,
+            (SELECT count(DISTINCT city) FROM theatres)::int AS cities
        FROM show_stats st
        LEFT JOIN show_bookings sb ON sb.show_id = st.id`,
   );
@@ -280,6 +268,7 @@ const getGenres = async (req, res) => {
 
 module.exports = {
   getSummary,
+  getSlowShows,
   getSiteSummary,
   rankMovies,
   rankTheatres,

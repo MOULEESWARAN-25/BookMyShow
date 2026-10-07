@@ -1,9 +1,6 @@
 import { useEffect, useState } from "react";
 import {
   Building2,
-  CalendarClock,
-  CalendarDays,
-  CircleX,
   Clapperboard,
   Clock,
   Filter,
@@ -12,15 +9,15 @@ import {
   MapPin,
   Percent,
   Receipt,
-  Tags,
   Ticket,
-  TrendingDown,
   UserCheck,
   UserCog,
   Users,
+  X,
 } from "lucide-react";
 import {
   getSummary,
+  getSlowShows,
   getSiteSummary,
   rankMovies,
   rankTheatres,
@@ -33,38 +30,46 @@ import {
 import Loading from "../../components/Loading";
 import Message from "../../components/Message";
 import MetricsTable from "../../components/MetricsTable";
-import { formatClockTime, formatDate, formatPrice } from "../../utils/format";
+import BarChart from "../../components/charts/BarChart";
+import DonutChart from "../../components/charts/DonutChart";
+import LineChart from "../../components/charts/LineChart";
+import {
+  formatClockTime,
+  formatCompact,
+  formatDate,
+  formatDateTime,
+  formatShortDate,
+} from "../../utils/format";
 
-// A theatre owner runs their own theatres, so they also see when and what to schedule.
+// A tab can need more than one API call; their answers are merged into one object.
+const loadAll =
+  (...loaders) =>
+  async (filters) => {
+    const answers = await Promise.all(loaders.map((load) => load(filters)));
+    return Object.assign({}, ...answers);
+  };
+
+// A theatre owner wants to know what to change: which shows, movies, times and theatres sell poorly.
 const THEATRE_OWNER_TABS = [
-  { key: "summary", title: "Summary", icon: LayoutGrid, load: getSummary },
-  { key: "movies", title: "Movies", icon: Clapperboard, load: rankMovies },
-  { key: "theatres", title: "Theatres", icon: Building2, load: rankTheatres },
-  { key: "daily", title: "Daily", icon: CalendarDays, load: getDaily },
+  { key: "overview", title: "Overview", icon: LayoutGrid, load: loadAll(getSummary, getDaily, getSlowShows) },
+  { key: "movies", title: "Movies", icon: Clapperboard, load: loadAll(rankMovies, getGenres) },
   { key: "showTimes", title: "Show times", icon: Clock, load: getShowTimes },
-  { key: "genres", title: "Genres & languages", icon: Tags, load: getGenres },
+  { key: "theatres", title: "Theatres", icon: Building2, load: rankTheatres },
 ];
 
-// The site owner looks at the whole platform: how big it is and which owners and cities perform.
+// The site owner looks at the business as a whole: money, customers, partners and cities.
 const SITE_TABS = [
-  { key: "summary", title: "Summary", icon: LayoutGrid, load: getSiteSummary },
+  { key: "overview", title: "Overview", icon: LayoutGrid, load: loadAll(getSiteSummary, getDaily) },
   { key: "owners", title: "Theatre owners", icon: UserCog, load: rankOwners },
   { key: "cities", title: "Cities", icon: MapPin, load: rankCities },
-  { key: "theatres", title: "Theatres", icon: Building2, load: rankTheatres },
-  { key: "movies", title: "Movies", icon: Clapperboard, load: rankMovies },
-  { key: "daily", title: "Daily", icon: CalendarDays, load: getDaily },
+  { key: "movies", title: "Movies", icon: Clapperboard, load: loadAll(rankMovies, getGenres) },
 ];
-
-const RANKING_TABS = ["movies", "theatres", "owners", "cities"];
-const isRanking = (tab) => RANKING_TABS.includes(tab);
 
 const Dashboard = ({ global = false }) => {
   const TABS = global ? SITE_TABS : THEATRE_OWNER_TABS;
-  const [tab, setTab] = useState("summary");
+  const [tab, setTab] = useState("overview");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  const [sort, setSort] = useState("most");
-  const [limit, setLimit] = useState("5");
   const [filters, setFilters] = useState({});
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -94,15 +99,21 @@ const Dashboard = ({ global = false }) => {
     };
   }, [tab, filters]);
 
+  // Switching tabs keeps the dates already applied; typed dates only count after Apply.
   const selectTab = (key) => {
     setData(null);
     setTab(key);
-    setFilters({ from, to, ...(isRanking(key) && { sort, limit }) });
   };
 
   const handleApply = (event) => {
     event.preventDefault();
-    setFilters({ from, to, ...(isRanking(tab) && { sort, limit }) });
+    setFilters({ from, to });
+  };
+
+  const clearDates = () => {
+    setFrom("");
+    setTo("");
+    setFilters({});
   };
 
   return (
@@ -111,8 +122,8 @@ const Dashboard = ({ global = false }) => {
         <h1>{global ? "Site analytics" : "Dashboard"}</h1>
         <p className="muted">
           {global
-            ? "Numbers for every theatre on the site. Cancelled shows are not counted."
-            : "Numbers for your own theatres only. Cancelled shows are not counted."}
+            ? "How the whole site is doing. Cancelled shows are not counted."
+            : "How your own theatres are doing. Cancelled shows are not counted."}
         </p>
       </div>
 
@@ -134,6 +145,7 @@ const Dashboard = ({ global = false }) => {
           <input
             type="date"
             value={from}
+            max={to || undefined}
             onChange={(event) => setFrom(event.target.value)}
           />
         </label>
@@ -142,119 +154,279 @@ const Dashboard = ({ global = false }) => {
           <input
             type="date"
             value={to}
+            min={from || undefined}
             onChange={(event) => setTo(event.target.value)}
           />
         </label>
-        {isRanking(tab) && (
-          <>
-            <select
-              value={sort}
-              onChange={(event) => setSort(event.target.value)}
-            >
-              <option value="most">Most tickets</option>
-              <option value="least">Least tickets</option>
-            </select>
-            <select
-              value={limit}
-              onChange={(event) => setLimit(event.target.value)}
-            >
-              <option value="5">Top 5</option>
-              <option value="10">Top 10</option>
-              <option value="50">Top 50</option>
-            </select>
-          </>
-        )}
         <button type="submit">
           <Filter /> Apply
         </button>
+        {(from || to || filters.from || filters.to) && (
+          <button type="button" className="secondary" onClick={clearDates}>
+            <X /> Clear
+          </button>
+        )}
+        <span className="muted date-range">{describeDates(filters)}</span>
       </form>
 
       {error && <Message type="error">{error}</Message>}
       {loading && <Loading />}
       {!loading && data && (
         <>
-          {tab === "summary" &&
-            (global ? <SiteSummary summary={data.summary} /> : <Summary summary={data.summary} />)}
-          {tab === "owners" && (
-            <MetricsTable
-              rows={data.results}
-              labelColumns={[
-                { key: "name", title: "Theatre owner" },
-                { key: "theatres", title: "Theatres" },
-              ]}
-            />
+          {tab === "overview" && !global && (
+            <>
+              <SummaryCards
+                items={[
+                  ["Revenue", formatWholePrice(data.summary.revenue), IndianRupee],
+                  ["Tickets sold", formatCount(data.summary.tickets), Ticket],
+                  ["Occupancy", percent(data.summary.occupancyPercent), Percent],
+                  ["Shows", formatCount(data.summary.shows), Clapperboard],
+                ]}
+              />
+              <div className="chart-grid">
+                <ChartCard title="Revenue per day" note={BY_SHOW_DATE}>
+                  <RevenuePerDay days={data.days} />
+                </ChartCard>
+                <ChartCard
+                  title="Shows selling slowly"
+                  note="Next 3 days, most empty seats first. Worth promoting before they start."
+                >
+                  <SlowShows shows={data.shows} />
+                </ChartCard>
+              </div>
+              <DailyTable days={data.days} />
+            </>
           )}
-          {tab === "cities" && (
-            <MetricsTable
-              rows={data.results}
-              labelColumns={[
-                { key: "city", title: "City" },
-                { key: "theatres", title: "Theatres" },
-              ]}
-            />
+          {tab === "overview" && global && (
+            <>
+              <SummaryCards
+                items={[
+                  ["Revenue", formatWholePrice(data.summary.revenue), IndianRupee],
+                  ["Tickets sold", formatCount(data.summary.tickets), Ticket],
+                  ["Bookings", formatCount(data.summary.bookings), Receipt],
+                  ["Customers who booked", formatCount(data.summary.customersWhoBooked), UserCheck],
+                  ["Registered customers", formatCount(data.summary.registeredCustomers), Users],
+                  ["Theatre owners", formatCount(data.summary.theatreOwners), UserCog],
+                  ["Theatres", formatCount(data.summary.theatres), Building2],
+                  ["Cities", formatCount(data.summary.cities), MapPin],
+                ]}
+              />
+              <p className="muted summary-note">
+                The last four are today's totals, whatever the dates.
+              </p>
+              <ChartCard title="Revenue per day" note={BY_SHOW_DATE}>
+                <RevenuePerDay days={data.days} />
+              </ChartCard>
+              <DailyTable days={data.days} />
+            </>
           )}
           {tab === "movies" && (
-            <MetricsTable
-              rows={data.results}
-              labelColumns={[
-                { key: "title", title: "Movie" },
-                { key: "language", title: "Language" },
-                { key: "genre", title: "Genre" },
-              ]}
-            />
-          )}
-          {tab === "theatres" && (
-            <MetricsTable
-              rows={data.results}
-              labelColumns={[
-                { key: "name", title: "Theatre" },
-                { key: "city", title: "City" },
-                // A theatre owner's own name on every row would say nothing, so only the site owner sees it.
-                ...(global ? [{ key: "owner", title: "Owner" }] : []),
-              ]}
-            />
-          )}
-          {tab === "daily" && (
-            <MetricsTable
-              rows={data.days}
-              labelColumns={[
-                { key: "date", title: "Date", format: formatDate },
-              ]}
-            />
+            <>
+              {global ? (
+                <ChartCard title="Revenue by movie">
+                  <BarChart rows={toRows(data.results, "title", "revenue")} formatValue={formatShortPrice} />
+                </ChartCard>
+              ) : (
+                <ChartCard
+                  title="Occupancy by movie"
+                  note="Share of seats sold. Movies near the bottom may need fewer shows."
+                >
+                  <BarChart
+                    rows={toRows(sortBy(data.results, "occupancyPercent"), "title", "occupancyPercent")}
+                    formatValue={percent}
+                    max={100}
+                  />
+                </ChartCard>
+              )}
+              <div className="chart-grid">
+                <ChartCard title="Tickets by genre">
+                  <DonutChart rows={toRows(data.byGenre, "genre", "tickets")} formatValue={formatCount} totalLabel="Tickets" />
+                </ChartCard>
+                <ChartCard title="Tickets by language">
+                  <DonutChart rows={toRows(data.byLanguage, "language", "tickets")} formatValue={formatCount} totalLabel="Tickets" />
+                </ChartCard>
+              </div>
+              <TableView>
+                <MetricsTable
+                  rows={data.results}
+                  labelColumns={[
+                    { key: "title", title: "Movie" },
+                    { key: "language", title: "Language" },
+                    { key: "genre", title: "Genre" },
+                  ]}
+                />
+              </TableView>
+            </>
           )}
           {tab === "showTimes" && (
             <>
-              <h3>By show time</h3>
-              <MetricsTable
-                rows={data.byShowTime}
-                labelColumns={[
-                  { key: "showTime", title: "Time", format: formatClockTime },
-                ]}
-              />
-              <h3>By day of the week</h3>
-              <MetricsTable
-                rows={data.byWeekday}
-                labelColumns={[{ key: "weekday", title: "Day" }]}
-              />
+              <div className="chart-grid">
+                <ChartCard title="Occupancy by show time" note="Quiet times are the ones to cut or discount.">
+                  <BarChart
+                    rows={data.byShowTime.map((row) => ({ label: formatClockTime(row.showTime), value: row.occupancyPercent }))}
+                    formatValue={percent}
+                    max={100}
+                  />
+                </ChartCard>
+                <ChartCard title="Occupancy by day of the week" note="Busy days can take more shows.">
+                  <BarChart rows={toRows(data.byWeekday, "weekday", "occupancyPercent")} formatValue={percent} max={100} />
+                </ChartCard>
+              </div>
+              <TableView>
+                <h3>By show time</h3>
+                <MetricsTable
+                  rows={data.byShowTime}
+                  labelColumns={[{ key: "showTime", title: "Time", format: formatClockTime }]}
+                />
+                <h3>By day of the week</h3>
+                <MetricsTable rows={data.byWeekday} labelColumns={[{ key: "weekday", title: "Day" }]} />
+              </TableView>
             </>
           )}
-          {tab === "genres" && (
+          {tab === "theatres" && (
             <>
-              <h3>By genre</h3>
-              <MetricsTable
-                rows={data.byGenre}
-                labelColumns={[{ key: "genre", title: "Genre" }]}
-              />
-              <h3>By language</h3>
-              <MetricsTable
-                rows={data.byLanguage}
-                labelColumns={[{ key: "language", title: "Language" }]}
-              />
+              <ChartCard title="Occupancy by theatre">
+                <BarChart
+                  rows={toRows(sortBy(data.results, "occupancyPercent"), "name", "occupancyPercent")}
+                  formatValue={percent}
+                  max={100}
+                />
+              </ChartCard>
+              <TableView>
+                <MetricsTable
+                  rows={data.results}
+                  labelColumns={[
+                    { key: "name", title: "Theatre" },
+                    { key: "city", title: "City" },
+                  ]}
+                />
+              </TableView>
+            </>
+          )}
+          {tab === "owners" && (
+            <>
+              <ChartCard
+                title="Revenue by theatre owner"
+                note="Owners near the bottom may need help, or may have stopped adding shows."
+              >
+                <BarChart rows={toRows(data.results, "name", "revenue")} formatValue={formatShortPrice} />
+              </ChartCard>
+              <TableView>
+                <MetricsTable
+                  rows={data.results}
+                  labelColumns={[
+                    { key: "name", title: "Theatre owner" },
+                    { key: "theatres", title: "Theatres" },
+                  ]}
+                />
+              </TableView>
+            </>
+          )}
+          {tab === "cities" && (
+            <>
+              <ChartCard title="Share of revenue by city">
+                <DonutChart rows={toRows(data.results, "city", "revenue")} formatValue={formatShortPrice} totalLabel="Revenue" />
+              </ChartCard>
+              <TableView>
+                <MetricsTable
+                  rows={data.results}
+                  labelColumns={[
+                    { key: "city", title: "City" },
+                    { key: "theatres", title: "Theatres" },
+                  ]}
+                />
+              </TableView>
             </>
           )}
         </>
       )}
     </div>
+  );
+};
+
+// Says which shows the numbers cover, so typed but not yet applied dates cannot be mistaken for the real ones.
+const describeDates = ({ from, to }) => {
+  if (from && to) return from === to ? `Shows on ${formatDay(from)}` : `Shows from ${formatDay(from)} to ${formatDay(to)}`;
+  if (from) return `Shows from ${formatDay(from)} onwards`;
+  if (to) return `Shows up to ${formatDay(to)}`;
+  return "All shows";
+};
+
+// Small helpers that turn API rows into what the charts expect.
+const toRows = (rows, labelKey, valueKey) => rows.map((row) => ({ label: row[labelKey], value: row[valueKey] }));
+const sortBy = (rows, key) => [...rows].sort((a, b) => b[key] - a[key]);
+const percent = (value) => `${value}%`;
+// "2026-10-08" read as a local day, so it never slips to the day before.
+const formatDay = (value) => formatDate(`${value}T00:00:00`);
+const formatCount = (value) => Number(value).toLocaleString("en-IN");
+const formatShortPrice = (value) => `Rs. ${formatCompact(value)}`;
+// Ticket prices are whole rupees, so a total never has paise and the card can skip the ".00".
+const formatWholePrice = (value) => `Rs. ${formatCount(value)}`;
+
+// Daily numbers are grouped by the day of the show, not the day the ticket was bought,
+// so days further ahead show less because fewer tickets have been sold for them yet.
+const BY_SHOW_DATE = "By show date. Later days are still selling.";
+
+const ChartCard = ({ title, note, children }) => (
+  <section className="panel chart-card">
+    <h3>{title}</h3>
+    {note && <p className="muted chart-note">{note}</p>}
+    {children}
+  </section>
+);
+
+const RevenuePerDay = ({ days }) => (
+  <LineChart
+    points={days.map((day) => ({ label: formatShortDate(day.date), value: day.revenue }))}
+    formatValue={formatWholePrice}
+    formatAxis={formatCompact}
+  />
+);
+
+// The exact numbers stay one click away, for anyone who cannot or does not want to read a chart.
+const TableView = ({ label = "View as table", children }) => (
+  <details className="table-view">
+    <summary>{label}</summary>
+    {children}
+  </details>
+);
+
+const DailyTable = ({ days }) => (
+  <TableView label="View day by day">
+    <MetricsTable rows={days} labelColumns={[{ key: "date", title: "Date", format: formatDay }]} />
+  </TableView>
+);
+
+const SlowShows = ({ shows }) => {
+  if (shows.length === 0) {
+    return <p className="muted">No shows in the next 3 days.</p>;
+  }
+
+  return (
+    <table className="table">
+      <thead>
+        <tr>
+          <th>Show</th>
+          <th className="number">Seats sold</th>
+        </tr>
+      </thead>
+      <tbody>
+        {shows.map((show) => (
+          <tr key={show.id}>
+            <td>
+              <strong>{show.movie}</strong>
+              <span className="muted cell-detail">
+                {show.theatre} · {formatDateTime(show.startsAt)}
+              </span>
+            </td>
+            <td className="number">
+              {show.tickets} of {show.capacity}
+              <span className="muted cell-detail">{percent(show.occupancyPercent)}</span>
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
   );
 };
 
@@ -273,36 +445,5 @@ const SummaryCards = ({ items }) => (
     ))}
   </div>
 );
-
-// Customers, owners and theatres are the platform's size today; the rest follow the chosen dates.
-const SiteSummary = ({ summary }) => (
-  <SummaryCards
-    items={[
-      ["Revenue", formatPrice(summary.revenue), IndianRupee],
-      ["Bookings", summary.bookings, Receipt],
-      ["Tickets sold", summary.tickets, Ticket],
-      ["Occupancy", `${summary.occupancyPercent}%`, Percent],
-      ["Customers who booked", summary.customersWhoBooked, UserCheck],
-      ["Registered customers", summary.registeredCustomers, Users],
-      ["Theatre owners", summary.theatreOwners, UserCog],
-      ["Theatres", summary.theatres, Building2],
-    ]}
-  />
-);
-
-const Summary = ({ summary }) => {
-  const items = [
-    ["Revenue", formatPrice(summary.revenue), IndianRupee],
-    ["Bookings", summary.bookings, Receipt],
-    ["Tickets sold", summary.tickets, Ticket],
-    ["Occupancy", `${summary.occupancyPercent}%`, Percent],
-    ["Shows", summary.shows, Clapperboard],
-    ["Upcoming shows", summary.upcomingShows, CalendarClock],
-    ["Cancelled bookings", summary.cancellations, CircleX],
-    ["Cancellation rate", `${summary.cancellationRatePercent}%`, TrendingDown],
-  ];
-
-  return <SummaryCards items={items} />;
-};
 
 export default Dashboard;
