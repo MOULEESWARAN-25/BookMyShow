@@ -1,11 +1,23 @@
 const THEME_KEY = "theme";
 
-const getTheme = () => (localStorage.getItem(THEME_KEY) === "dark" ? "dark" : "light");
+const getTheme = () => {
+  const savedTheme = localStorage.getItem(THEME_KEY);
 
-// The dark colours in main.css apply when <html> has the "dark" class.
-const applyTheme = (theme) => {
+  if (savedTheme === "dark" || savedTheme === "light") {
+    return savedTheme;
+  }
+
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+};
+
+const applyTheme = (theme, persist = true) => {
   document.documentElement.classList.toggle("dark", theme === "dark");
-  localStorage.setItem(THEME_KEY, theme);
+
+  if (persist) {
+    localStorage.setItem(THEME_KEY, theme);
+  }
 };
 
 export { getTheme, applyTheme };
