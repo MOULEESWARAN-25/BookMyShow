@@ -9,10 +9,12 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@reduxjs/toolkit": "^2.13.0",
     "lucide-react": "^1.51.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-is": "^19.3.0",
+    "react-redux": "^9.3.0",
     "react-router-dom": "^7.18.4",
     "recharts": "^3.10.1"
   },
