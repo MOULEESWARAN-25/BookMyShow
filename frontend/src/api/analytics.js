@@ -22,6 +22,8 @@ const getShowTimes = (filters) => request(`/analytics/show-times${toQuery(filter
 
 const getGenres = (filters) => request(`/analytics/genres${toQuery(filters)}`);
 
+const getReviews = (filters) => request(`/analytics/reviews${toQuery(filters)}`);
+
 export {
   getSummary,
   getSlowShows,
@@ -33,4 +35,5 @@ export {
   getDaily,
   getShowTimes,
   getGenres,
+  getReviews,
 };

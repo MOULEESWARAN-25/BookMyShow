@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { LockKeyhole, Mail, User, UserPlus } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { useSelector } from "react-redux";
+import { selectUser } from "../store/authSlice";
 import { signup } from "../api/auth";
 import Message from "../components/Message";
 
 const Signup = () => {
-  const { user } = useAuth();
+  const user = useSelector(selectUser);
   const navigate = useNavigate();
   const location = useLocation();
   const [name, setName] = useState("");

@@ -6,6 +6,7 @@ const Show = require("./show");
 const ShowSeat = require("./showSeat");
 const Booking = require("./booking");
 const BookingSeat = require("./bookingSeat");
+const Review = require("./review");
 
 User.hasMany(Theatre, { foreignKey: "adminId", as: "theatres" });
 Theatre.belongsTo(User, { foreignKey: "adminId", as: "admin" });
@@ -28,6 +29,9 @@ Booking.belongsTo(User, { foreignKey: "userId" });
 Show.hasMany(Booking, { foreignKey: "showId" });
 Booking.belongsTo(Show, { foreignKey: "showId" });
 
+Booking.hasOne(Review, { foreignKey: "bookingId" });
+Review.belongsTo(Booking, { foreignKey: "bookingId" });
+
 Booking.belongsToMany(ShowSeat, {
   through: BookingSeat,
   foreignKey: "bookingId",
@@ -49,4 +53,5 @@ module.exports = {
   ShowSeat,
   Booking,
   BookingSeat,
+  Review,
 };

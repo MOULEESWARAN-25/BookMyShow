@@ -1547,6 +1547,176 @@ input[type="search"]::-webkit-search-cancel-button {
   font-size: 12px;
 }
 
+/* Reviews: the customer's form under a past booking, and the cards the theatre owner reads. */
+
+/* The review form opens as a popup (<dialog>) in the middle of the screen. */
+.review-dialog {
+  width: min(580px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: var(--shadow-lg);
+}
+
+.review-dialog::backdrop {
+  background: rgb(0 0 0 / 55%);
+}
+
+.review-form {
+  display: grid;
+  gap: 18px;
+  padding: 24px;
+}
+
+.review-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.review-form-header h3 {
+  margin: 0 0 4px;
+}
+
+.review-form-header p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.review-field {
+  display: grid;
+  gap: 6px;
+}
+
+.review-field label {
+  font-size: 14px;
+  font-weight: 500;
+}
+
+.review-field p {
+  margin: 0;
+  font-size: 13px;
+}
+
+.review-field textarea {
+  width: 100%;
+}
+
+.review-count {
+  text-align: right;
+}
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+
+.review-note {
+  flex: 1 1 200px;
+  margin: 0;
+  font-size: 13px;
+}
+
+.review-error {
+  margin: 0;
+  color: var(--destructive-text);
+  font-size: 14px;
+}
+
+.rating {
+  display: flex;
+  gap: 4px;
+}
+
+.star,
+.star:hover:not(:disabled) {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  background: transparent;
+  color: var(--muted-foreground);
+  transition: transform 0.15s ease;
+}
+
+.star-icon {
+  width: 28px;
+  height: 28px;
+  fill: transparent;
+  stroke: currentColor;
+  stroke-width: 1.6;
+  stroke-linejoin: round;
+}
+
+.star.selected,
+.star:hover:not(:disabled) {
+  color: var(--warning);
+  transform: scale(1.08);
+}
+
+.star.selected .star-icon,
+.star:hover .star-icon {
+  fill: currentColor;
+}
+
+.section-title {
+  margin: 8px 0 12px;
+}
+
+.feedback-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+}
+
+.feedback-card {
+  padding: 20px 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.feedback-card h3 {
+  margin: 0 0 2px;
+  color: var(--primary);
+}
+
+.feedback-card .feedback-show {
+  margin: 0 0 12px;
+  font-size: 13px;
+}
+
+.feedback-card p {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 0 0;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.feedback-card p svg.lucide {
+  flex: 0 0 auto;
+  width: 16px;
+  height: 16px;
+  margin-top: 3px;
+  color: var(--primary);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;
@@ -1890,8 +2060,11 @@ input[type="search"]::-webkit-search-cancel-button {
     align-items: stretch;
   }
 
+  /* Price, booking number, Ticket and Rate movie do not fit one phone-wide row, so they wrap. */
   .booking-side {
+    flex-wrap: wrap;
     justify-content: space-between;
+    gap: 12px;
     padding-top: 12px;
     border-top: 1px solid var(--border);
   }

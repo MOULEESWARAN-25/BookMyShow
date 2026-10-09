@@ -1,6 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import { Provider } from "react-redux";
+import store from "./store";
 import App from "./App";
 import { applyTheme, getTheme } from "./utils/theme";
 import "./styles/main.css";
@@ -9,8 +10,8 @@ applyTheme(getTheme(), false);
 
 createRoot(document.getElementById("root")).render(
   <BrowserRouter>
-    <AuthProvider>
+    <Provider store={store}>
       <App />
-    </AuthProvider>
+    </Provider>
   </BrowserRouter>,
 );

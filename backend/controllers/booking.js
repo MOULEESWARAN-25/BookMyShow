@@ -139,18 +139,25 @@ const createBooking = async (req, res) => {
 const listMyBookings = async (req, res) => {
   const bookings = await sequelize.query(
     `SELECT b.id, b.status, b.total_amount::float8 AS "totalAmount", b.created_at AS "createdAt",
-            s.id AS "showId", s.starts_at AS "startsAt", s.cancelled_at AS "showCancelledAt",
+            s.id AS "showId", s.starts_at AS "startsAt", s.ends_at AS "endsAt",
+            s.cancelled_at AS "showCancelledAt",
             m.id AS "movieId", m.title AS "movieTitle",
             t.name AS "theatreName", t.city AS "theatreCity",
-            array_agg(ss.seat_number ORDER BY ss.id) AS seats
+            array_agg(ss.seat_number ORDER BY ss.id) AS seats,
+            -- The customer's review, so the page shows "Rate movie" or "Edit review".
+            CASE WHEN r.id IS NULL THEN NULL ELSE json_build_object(
+              'movieRating', r.movie_rating, 'theatreRating', r.theatre_rating,
+              'likedAspects', r.liked_aspects, 'comment', r.comment
+            ) END AS review
        FROM bookings b
        JOIN shows s ON s.id = b.show_id
        JOIN movies m ON m.id = s.movie_id
        JOIN theatres t ON t.id = s.theatre_id
        JOIN booking_seats bs ON bs.booking_id = b.id
        JOIN show_seats ss ON ss.id = bs.show_seat_id
+       LEFT JOIN reviews r ON r.booking_id = b.id
       WHERE b.user_id = :userId
-      GROUP BY b.id, s.id, m.id, t.id
+      GROUP BY b.id, s.id, m.id, t.id, r.id
       ORDER BY s.starts_at DESC`,
     { replacements: { userId: req.user.userId }, type: "SELECT" },
   );

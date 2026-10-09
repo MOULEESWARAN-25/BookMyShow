@@ -4,11 +4,14 @@ import {
   Clapperboard,
   Clock,
   Filter,
+  Heart,
   IndianRupee,
   LayoutGrid,
   MapPin,
+  MessageSquareText,
   Percent,
   Receipt,
+  Star,
   Ticket,
   UserCheck,
   UserCog,
@@ -26,10 +29,12 @@ import {
   getDaily,
   getShowTimes,
   getGenres,
+  getReviews,
 } from "../../api/analytics";
 import Loading from "../../components/Loading";
 import Message from "../../components/Message";
 import MetricsTable from "../../components/MetricsTable";
+import ReviewCard from "../../components/ReviewCard";
 import BarChart from "../../components/charts/BarChart";
 import DonutChart from "../../components/charts/DonutChart";
 import LineChart from "../../components/charts/LineChart";
@@ -55,6 +60,7 @@ const THEATRE_OWNER_TABS = [
   { key: "movies", title: "Movies", icon: Clapperboard, load: loadAll(rankMovies, getGenres) },
   { key: "showTimes", title: "Show times", icon: Clock, load: getShowTimes },
   { key: "theatres", title: "Theatres", icon: Building2, load: rankTheatres },
+  { key: "reviews", title: "Reviews", icon: MessageSquareText, load: getReviews },
 ];
 
 // The site owner looks at the business as a whole: money, customers, partners and cities.
@@ -303,6 +309,36 @@ const Dashboard = ({ global = false }) => {
               </TableView>
             </>
           )}
+          {tab === "reviews" && (
+            <>
+              <SummaryCards
+                items={[
+                  ["Reviews", formatCount(data.summary.reviewCount), MessageSquareText],
+                  ["Movie rating", outOfFive(data.summary.averageMovieRating), Star],
+                  ["Theatre rating", outOfFive(data.summary.averageTheatreRating), Building2],
+                  ["Most liked", data.likedAspects[0]?.aspect ?? "None yet", Heart],
+                ]}
+              />
+              <div className="chart-grid">
+                <ChartCard title="Theatre rating by theatre" note="Seats, sound, screen and cleanliness, out of 5.">
+                  <BarChart rows={toRows(data.byTheatre, "name", "averageTheatreRating")} formatValue={outOfFive} max={5} />
+                </ChartCard>
+                <ChartCard title="What customers liked" note="How many reviews picked each one.">
+                  <BarChart rows={toRows(data.likedAspects, "aspect", "count")} formatValue={formatCount} />
+                </ChartCard>
+              </div>
+              <h3 className="section-title">Latest reviews</h3>
+              {data.reviews.length === 0 ? (
+                <p className="muted">No reviews for these dates yet.</p>
+              ) : (
+                <div className="feedback-list">
+                  {data.reviews.map((review) => (
+                    <ReviewCard key={review.id} review={review} />
+                  ))}
+                </div>
+              )}
+            </>
+          )}
           {tab === "owners" && (
             <>
               <ChartCard
@@ -356,6 +392,7 @@ const describeDates = ({ from, to }) => {
 const toRows = (rows, labelKey, valueKey) => rows.map((row) => ({ label: row[labelKey], value: row[valueKey] }));
 const sortBy = (rows, key) => [...rows].sort((a, b) => b[key] - a[key]);
 const percent = (value) => `${value}%`;
+const outOfFive = (value) => (value ? `${value} / 5` : "None yet");
 // "2026-10-08" read as a local day, so it never slips to the day before.
 const formatDay = (value) => formatDate(`${value}T00:00:00`);
 const formatCount = (value) => Number(value).toLocaleString("en-IN");

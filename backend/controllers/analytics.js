@@ -5,6 +5,7 @@ const TIMEZONE = "Asia/Kolkata";
 const DATE_REGEX = /^\d{4}-\d{2}-\d{2}$/;
 const SLOW_SHOWS_LIMIT = 5;
 const SLOW_SHOWS_DAYS = 3;
+const LATEST_REVIEWS = 50;
 
 const METRICS = `
   count(st.id)::int AS shows,
@@ -266,6 +267,66 @@ const getGenres = async (req, res) => {
   res.json({ byGenre, byLanguage });
 };
 
+// What customers said about the owner's shows. Reviews are joined to show_stats, so they follow
+// the same rules as every other number here: the owner's own theatres, the chosen dates, live shows.
+const getReviews = async (req, res) => {
+  const filters = parseFilters(req.query);
+  if (filters.error) {
+    return res.status(400).json({ message: filters.error });
+  }
+
+  const fromReviews = `
+      FROM reviews r
+      JOIN bookings b ON b.id = r.booking_id
+      JOIN show_stats st ON st.id = b.show_id`;
+
+  const [[summary], byTheatre, likedAspects, reviews] = await Promise.all([
+    runQuery(
+      req,
+      filters,
+      `SELECT count(*)::int AS "reviewCount",
+              coalesce(round(avg(r.movie_rating), 1), 0)::float8 AS "averageMovieRating",
+              coalesce(round(avg(r.theatre_rating), 1), 0)::float8 AS "averageTheatreRating"
+         ${fromReviews}`,
+    ),
+    runQuery(
+      req,
+      filters,
+      `SELECT t.name, round(avg(r.theatre_rating), 1)::float8 AS "averageTheatreRating"
+         ${fromReviews}
+         JOIN theatres t ON t.id = st.theatre_id
+        GROUP BY t.id
+        ORDER BY "averageTheatreRating" DESC, t.name`,
+    ),
+    runQuery(
+      req,
+      filters,
+      `SELECT aspect, count(*)::int AS count
+         ${fromReviews}
+         CROSS JOIN unnest(r.liked_aspects) AS aspect
+        GROUP BY aspect
+        ORDER BY count DESC, aspect`,
+    ),
+    runQuery(
+      req,
+      filters,
+      `SELECT r.id, split_part(u.name, ' ', 1) AS "customerName",
+              m.title AS movie, t.name AS theatre, st.starts_at AS "startsAt",
+              r.movie_rating AS "movieRating", r.theatre_rating AS "theatreRating",
+              r.liked_aspects AS "likedAspects", r.comment, r.created_at AS "createdAt"
+         ${fromReviews}
+         JOIN movies m ON m.id = st.movie_id
+         JOIN theatres t ON t.id = st.theatre_id
+         JOIN users u ON u.id = b.user_id
+        ORDER BY r.created_at DESC
+        LIMIT :limit`,
+      { limit: LATEST_REVIEWS },
+    ),
+  ]);
+
+  res.json({ summary, byTheatre, likedAspects, reviews });
+};
+
 module.exports = {
   getSummary,
   getSlowShows,
@@ -277,4 +338,5 @@ module.exports = {
   getDaily,
   getShowTimes,
   getGenres,
+  getReviews,
 };

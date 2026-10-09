@@ -11,4 +11,8 @@ const listMyBookings = () => request("/bookings/mine");
 
 const downloadTicket = (bookingId) => download(`/bookings/${bookingId}/ticket`, "ticket.pdf");
 
-export { createBooking, listMyBookings, downloadTicket };
+// Sends the customer's review of a show they watched. A booking can be reviewed only once.
+const createReview = (bookingId, review) =>
+  request(`/bookings/${bookingId}/review`, { method: "POST", body: review });
+
+export { createBooking, listMyBookings, downloadTicket, createReview };

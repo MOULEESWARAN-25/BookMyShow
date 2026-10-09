@@ -1,9 +1,19 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Armchair, CalendarClock, ChevronDown, Download, History, MapPin, Ticket } from "lucide-react";
-import { downloadTicket, listMyBookings } from "../api/booking";
+import {
+  Armchair,
+  CalendarClock,
+  ChevronDown,
+  Download,
+  History,
+  MapPin,
+  Star,
+  Ticket,
+} from "lucide-react";
+import { createReview, downloadTicket, listMyBookings } from "../api/booking";
 import useAction from "../hooks/useAction";
 import Loading from "../components/Loading";
+import ReviewForm from "../components/ReviewForm";
 import Message from "../components/Message";
 import StatusBadge from "../components/StatusBadge";
 import Toasts from "../components/Toasts";
@@ -14,13 +24,18 @@ const PAST_PAGE_SIZE = 10;
 const isUpcoming = (booking) =>
   booking.status === "confirmed" && new Date(booking.startsAt) > new Date();
 
+// Only a show the customer has actually watched can be reviewed, and only once.
+const canReview = (booking) =>
+  booking.status === "confirmed" && new Date(booking.endsAt) <= new Date() && !booking.review;
+
 const statusOf = (booking) => {
   if (booking.status === "cancelled") return "cancelled";
   return isUpcoming(booking) ? "confirmed" : "over";
 };
 
 // Every upcoming booking is confirmed, so the status badge is only shown for past ones.
-const BookingList = ({ bookings, showStatus, onDownload, busy }) => (
+// onReview is only passed for past bookings, which are the only ones that can be rated.
+const BookingList = ({ bookings, showStatus, onDownload, onReview, busy }) => (
   <div className="booking-list">
     {bookings.map((booking) => (
       <div key={booking.id} className="booking-card">
@@ -39,6 +54,11 @@ const BookingList = ({ bookings, showStatus, onDownload, busy }) => (
             <span>
               <Armchair /> {booking.seats.join(", ")}
             </span>
+            {booking.review && (
+              <span>
+                <Star /> You rated it {booking.review.movieRating} / 5
+              </span>
+            )}
           </div>
         </div>
         <div className="booking-side">
@@ -47,6 +67,11 @@ const BookingList = ({ bookings, showStatus, onDownload, busy }) => (
           {booking.status === "confirmed" && (
             <button className="secondary" onClick={() => onDownload(booking.id)} disabled={busy}>
               <Download /> Ticket
+            </button>
+          )}
+          {onReview && canReview(booking) && (
+            <button className="secondary" onClick={() => onReview(booking.id)}>
+              <Star /> Rate movie
             </button>
           )}
         </div>
@@ -61,11 +86,23 @@ const MyBookings = () => {
   const [error, setError] = useState("");
   const [pastLimit, setPastLimit] = useState(PAST_PAGE_SIZE);
   const { message, error: actionError, busy, run, clear } = useAction();
+  // The booking whose review form is open; only one form is open at a time.
+  const [reviewingId, setReviewingId] = useState(null);
 
   const handleDownload = (bookingId) =>
     run(async () => {
       await downloadTicket(bookingId);
       return { message: "Ticket downloaded" };
+    });
+
+  const handleSubmitReview = (bookingId, values) =>
+    run(async () => {
+      const data = await createReview(bookingId, values);
+      setBookings((current) =>
+        current.map((booking) => (booking.id === bookingId ? { ...booking, review: data.review } : booking)),
+      );
+      setReviewingId(null);
+      return data;
     });
 
   useEffect(() => {
@@ -88,6 +125,7 @@ const MyBookings = () => {
     .filter(isUpcoming)
     .sort((a, b) => new Date(a.startsAt) - new Date(b.startsAt));
   const pastBookings = bookings.filter((booking) => !isUpcoming(booking));
+  const reviewingBooking = bookings.find((booking) => booking.id === reviewingId);
 
   return (
     <div>
@@ -128,6 +166,7 @@ const MyBookings = () => {
                 showStatus
                 onDownload={handleDownload}
                 busy={busy}
+                onReview={setReviewingId}
               />
               {pastBookings.length > pastLimit && (
                 <div className="load-more">
@@ -139,6 +178,15 @@ const MyBookings = () => {
             </>
           )}
         </>
+      )}
+
+      {reviewingBooking && (
+        <ReviewForm
+          booking={reviewingBooking}
+          busy={busy}
+          onSubmit={(values) => handleSubmitReview(reviewingBooking.id, values)}
+          onCancel={() => setReviewingId(null)}
+        />
       )}
 
       <Toasts message={message} error={actionError} onClose={clear} />

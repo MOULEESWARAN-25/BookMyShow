@@ -11,6 +11,7 @@ const {
   getDaily,
   getShowTimes,
   getGenres,
+  getReviews,
 } = require("../controllers/analytics");
 
 const router = express.Router();
@@ -24,6 +25,7 @@ router.get("/summary", theatreOwner, getSummary);
 router.get("/slow-shows", theatreOwner, getSlowShows);
 router.get("/theatres", theatreOwner, rankTheatres);
 router.get("/show-times", theatreOwner, getShowTimes);
+router.get("/reviews", theatreOwner, getReviews);
 
 router.get("/site-summary", siteOwner, getSiteSummary);
 router.get("/owners", siteOwner, rankOwners);

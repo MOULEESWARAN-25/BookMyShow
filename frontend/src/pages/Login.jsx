@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { LockKeyhole, LogIn, Mail } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
+import { useDispatch, useSelector } from "react-redux";
+import { login, selectUser } from "../store/authSlice";
 import { homeFor } from "../utils/roles";
 import Message from "../components/Message";
 
@@ -10,7 +11,8 @@ import Message from "../components/Message";
 const returnPage = (from) => (from?.startsWith("/") && !from.startsWith("//") ? from : null);
 
 const Login = () => {
-  const { user, login } = useAuth();
+  const user = useSelector(selectUser);
+  const dispatch = useDispatch();
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const [email, setEmail] = useState("");
@@ -24,7 +26,7 @@ const Login = () => {
     setSubmitting(true);
     try {
       // After this, user is set and the redirect below takes them where they were going.
-      await login(email, password);
+      await dispatch(login(email, password));
     } catch (error) {
       setError(error.message);
     } finally {

@@ -13,7 +13,8 @@ import {
 import { getMovie, listShows } from "../api/movie";
 import { getSeats } from "../api/show";
 import { createBooking, downloadTicket } from "../api/booking";
-import { useAuth } from "../context/AuthContext";
+import { useSelector } from "react-redux";
+import { selectUser } from "../store/authSlice";
 import Loading from "../components/Loading";
 import Message from "../components/Message";
 import SeatMap from "../components/SeatMap";
@@ -24,7 +25,7 @@ const MAX_SEATS_PER_BOOKING = 10;
 
 const BookSeats = () => {
   const { movieId, showId } = useParams();
-  const { user } = useAuth();
+  const user = useSelector(selectUser);
   const location = useLocation();
   // The movie page passes its chosen day and filters, so "Back to shows" returns to the same view.
   const showsLink = `/movies/${movieId}${location.state?.showsSearch ?? ""}`;

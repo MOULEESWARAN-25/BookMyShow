@@ -16,13 +16,15 @@ import {
   UserPlus,
   X,
 } from "lucide-react";
-import { useAuth } from "../context/AuthContext";
-import { applyTheme, getTheme } from "../utils/theme";
+import { useDispatch, useSelector } from "react-redux";
+import { logout, selectUser } from "../store/authSlice";
+import { selectTheme, toggleTheme } from "../store/themeSlice";
 
 const Header = () => {
-  const { user, logout } = useAuth();
+  const user = useSelector(selectUser);
+  const theme = useSelector(selectTheme);
+  const dispatch = useDispatch();
   const navigate = useNavigate();
-  const [theme, setTheme] = useState(getTheme());
   const [menuOpen, setMenuOpen] = useState(false);
   const location = useLocation();
 
@@ -31,14 +33,8 @@ const Header = () => {
     setMenuOpen(false);
   }, [location.pathname]);
 
-  const toggleTheme = () => {
-    const nextTheme = theme === "dark" ? "light" : "dark";
-    applyTheme(nextTheme);
-    setTheme(nextTheme);
-  };
-
   const handleLogout = async () => {
-    await logout();
+    await dispatch(logout());
     navigate("/login");
   };
 
@@ -98,7 +94,7 @@ const Header = () => {
         <div className="nav">
           <button
             className="icon-button"
-            onClick={toggleTheme}
+            onClick={() => dispatch(toggleTheme())}
             title={
               theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
             }

@@ -1,10 +1,11 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useSelector } from "react-redux";
+import { selectUser } from "../store/authSlice";
 import { homeFor } from "../utils/roles";
 
 // Works like the role middleware on the backend, but for pages.
 const RequireRole = ({ role }) => {
-  const { user } = useAuth();
+  const user = useSelector(selectUser);
   const location = useLocation();
 
   // After logging in, the login page sends the user back to the page they asked for.
