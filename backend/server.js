@@ -65,10 +65,12 @@ const initDb = async () => {
   await Promise.all([sequelize.authenticate(), redis.connect()]);
 };
 
+const PORT = Number(process.env.PORT) || 3000;
+
 initDb()
   .then(() => {
-    app.listen(3000, () => {
-      logger.info("Server is running on port 3000");
+    app.listen(PORT, () => {
+      logger.info(`Server is running on port ${PORT}`);
     });
   })
   .catch((error) => {
