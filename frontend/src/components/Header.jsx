@@ -1,0 +1,137 @@
+import { useEffect, useState } from "react";
+import { Link, NavLink, useLocation, useNavigate } from "react-router-dom";
+import {
+  Building2,
+  CircleUserRound,
+  Clapperboard,
+  Film,
+  LayoutDashboard,
+  ShieldCheck,
+  LogIn,
+  LogOut,
+  Menu,
+  Moon,
+  Sun,
+  Ticket,
+  UserPlus,
+  X,
+} from "lucide-react";
+import { useDispatch, useSelector } from "react-redux";
+import { logout, selectUser } from "../store/authSlice";
+import { selectTheme, toggleTheme } from "../store/themeSlice";
+
+const Header = () => {
+  const user = useSelector(selectUser);
+  const theme = useSelector(selectTheme);
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const location = useLocation();
+
+  // On phones the links sit behind a menu button; close it after moving to another page.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [location.pathname]);
+
+  const handleLogout = async () => {
+    await dispatch(logout());
+    navigate("/login");
+  };
+
+  return (
+    <header className={menuOpen ? "header menu-open" : "header"}>
+      <div className="container header-inner">
+        <Link to="/" className="brand" aria-label="BookMyShow home">
+          <Ticket className="brand-icon" />
+          <span className="brand-text">
+            Book<span>My</span>Show
+          </span>
+        </Link>
+
+        <button
+          className="icon-button menu-button"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label={menuOpen ? "Close menu" : "Open menu"}
+          aria-expanded={menuOpen}
+        >
+          {menuOpen ? <X /> : <Menu />}
+        </button>
+
+        <nav className="nav">
+          <NavLink to="/" end>
+            <Film /> Movies
+          </NavLink>
+          {user?.role === "user" && (
+            <NavLink to="/bookings">
+              <Ticket /> My bookings
+            </NavLink>
+          )}
+          {user?.role === "admin" && (
+            <>
+              <NavLink to="/admin" end>
+                <LayoutDashboard /> Dashboard
+              </NavLink>
+              <NavLink to="/admin/theatres">
+                <Building2 /> My theatres
+              </NavLink>
+              <NavLink to="/admin/movies">
+                <Clapperboard /> Manage movies
+              </NavLink>
+            </>
+          )}
+          {user?.role === "super_admin" && (
+            <>
+              <NavLink to="/super-admin" end>
+                <ShieldCheck /> Owner panel
+              </NavLink>
+              <NavLink to="/super-admin/analytics">
+                <LayoutDashboard /> Site analytics
+              </NavLink>
+            </>
+          )}
+        </nav>
+
+        <div className="nav">
+          <button
+            className="icon-button"
+            onClick={() => dispatch(toggleTheme())}
+            title={
+              theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            }
+            aria-label={
+              theme === "dark" ? "Switch to light mode" : "Switch to dark mode"
+            }
+          >
+            {theme === "dark" ? <Sun /> : <Moon />}
+          </button>
+          {user ? (
+            <>
+              <span className="user-name">
+                <CircleUserRound /> {user.name}
+                {(user.role === "admin" || user.role === "super_admin") && (
+                  <span className="role">
+                    {user.role === "super_admin" ? "Owner" : "Admin"}
+                  </span>
+                )}
+              </span>
+              <button className="secondary" onClick={handleLogout}>
+                <LogOut /> Logout
+              </button>
+            </>
+          ) : (
+            <>
+              <NavLink to="/login">
+                <LogIn /> Login
+              </NavLink>
+              <NavLink to="/signup" className="nav-cta">
+                <UserPlus /> Sign up
+              </NavLink>
+            </>
+          )}
+        </div>
+      </div>
+    </header>
+  );
+};
+
+export default Header;
