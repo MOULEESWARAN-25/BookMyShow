@@ -20,6 +20,11 @@ import Message from "../components/Message";
 import SeatMap from "../components/SeatMap";
 import { formatDateTime, formatPrice } from "../utils/format";
 
+// crypto.randomUUID only exists on HTTPS or localhost pages, so other addresses (such as a phone
+// opening the app over the local network) fall back to a time-and-random key.
+const newBookingKey = () =>
+  crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
 // The backend refuses more than this; checking here too tells the user straight away.
 const MAX_SEATS_PER_BOOKING = 10;
 
@@ -35,7 +40,7 @@ const BookSeats = () => {
   // Seats chosen before logging in come back through the login page.
   const [selectedSeats, setSelectedSeats] = useState(location.state?.seats ?? []);
   // One key per seat selection: if the same booking is sent twice, the backend books it only once.
-  const [idempotencyKey, setIdempotencyKey] = useState(() => crypto.randomUUID());
+  const [idempotencyKey, setIdempotencyKey] = useState(() => newBookingKey());
   const [booking, setBooking] = useState(null);
   const [loading, setLoading] = useState(true);
   const [bookingError, setBookingError] = useState("");
@@ -91,7 +96,7 @@ const BookSeats = () => {
         ? current.filter((seat) => seat !== seatNumber)
         : [...current, seatNumber],
     );
-    setIdempotencyKey(crypto.randomUUID());
+    setIdempotencyKey(newBookingKey());
     setBookingError("");
   };
 
@@ -110,7 +115,7 @@ const BookSeats = () => {
       const data = await createBooking(show.id, selectedSeats, idempotencyKey);
       setBooking(data.booking);
       setSelectedSeats([]);
-      setIdempotencyKey(crypto.randomUUID());
+      setIdempotencyKey(newBookingKey());
     } catch (error) {
       setBookingError(error.message);
     }
