@@ -1,11 +1,26 @@
 const { UniqueConstraintError } = require("sequelize");
 const { sequelize, Theatre, Show } = require("../models");
 const { isNonEmptyString, parseId } = require("../utils/validation");
+const { moviesCacheKey, showsCacheKey, clearCache } = require("../utils/cache");
 
 const theatreJson = (theatre) => ({ id: theatre.id, name: theatre.name, city: theatre.city });
 
 const duplicateName = (res) =>
   res.status(409).json({ message: "You already have a theatre with this name" });
+
+// The movie list and each movie's show list keep the theatre's name and city in the cache,
+// so they are cleared after the theatre changes.
+const clearTheatreCaches = async (theatreId) => {
+  const shows = await Show.findAll({
+    where: { theatreId },
+    attributes: ["movieId"],
+    group: ["movieId"],
+  });
+  await Promise.all([
+    clearCache(moviesCacheKey()),
+    ...shows.map((show) => clearCache(showsCacheKey(show.movieId))),
+  ]);
+};
 
 const findOwnTheatre = async (req, res) => {
   const theatreId = parseId(req.params.theatreId);
@@ -86,6 +101,7 @@ const updateTheatre = async (req, res) => {
     }
     throw error;
   }
+  await clearTheatreCaches(theatre.id);
   res.status(200).json({ message: "Theatre updated successfully", theatre: theatreJson(theatre) });
 };
 
@@ -96,7 +112,7 @@ const deleteTheatre = async (req, res) => {
   const shows = await Show.count({ where: { theatreId: theatre.id } });
   if (shows > 0) {
     return res.status(409).json({
-      message: `This theatre has ${shows} show(s), so it is kept for booking history. Delete or cancel its upcoming shows instead.`,
+      message: `This theatre has ${shows} show(s), including cancelled ones, so it is kept for booking history and cannot be deleted. You can rename it instead.`,
     });
   }
   await theatre.destroy();

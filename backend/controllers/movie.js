@@ -355,7 +355,7 @@ const deleteMovie = async (req, res) => {
   const shows = await Show.count({ where: { movieId: movie.id } });
   if (shows > 0) {
     return res.status(409).json({
-      message: `This movie has ${shows} show(s), so it is kept for booking history. Delete or cancel its shows first.`,
+      message: `This movie has ${shows} show(s), including cancelled ones, so it is kept for booking history and cannot be deleted.`,
     });
   }
   await movie.destroy();
