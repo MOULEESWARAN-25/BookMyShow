@@ -75,6 +75,10 @@ const findOwnShow = async (req, res) => {
   return show;
 };
 
+// createBooking locks the show too, so a show is never changed or cancelled halfway through a booking.
+const lockShow = (showId, transaction) =>
+  Show.findByPk(showId, { attributes: ["id"], transaction, lock: transaction.LOCK.UPDATE });
+
 // The movie list only includes movies with upcoming shows, so it changes with shows too.
 const clearShowCaches = (movieId) =>
   Promise.all([clearCache(showsCacheKey(movieId)), clearCache(moviesCacheKey())]);
@@ -273,6 +277,8 @@ const updateShow = async (req, res) => {
   let bookingIds = [];
   try {
     await sequelize.transaction(async (transaction) => {
+      // Waits for bookings in progress, so every booking gets the new-time email.
+      await lockShow(show.id, transaction);
       await show.update(
         {
           startsAt: start,
@@ -331,6 +337,8 @@ const deleteShow = async (req, res) => {
   if (!show) return;
 
   const result = await sequelize.transaction(async (transaction) => {
+    // Waits for bookings in progress, so every booking is cancelled and emailed.
+    await lockShow(show.id, transaction);
     const bookings = await Booking.findAll({
       where: { showId: show.id },
       attributes: ["id", "status"],

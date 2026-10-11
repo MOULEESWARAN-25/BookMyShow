@@ -49,7 +49,12 @@ const createBooking = async (req, res) => {
 
   try {
     const booking = await sequelize.transaction(async (transaction) => {
-      const show = await Show.findByPk(numericShowId, { transaction });
+      // Locking the show makes a booking and a cancellation of the same show run one after the
+      // other, so a booking can never slip in while the show is being cancelled.
+      const show = await Show.findByPk(numericShowId, {
+        transaction,
+        lock: transaction.LOCK.UPDATE,
+      });
       if (!show) {
         throw new BookingError(404, "Show not found");
       }
