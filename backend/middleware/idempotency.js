@@ -3,6 +3,9 @@ const redis = require("../db/redis");
 const { redisLogger } = require("../utils/logger");
 
 const TTL_SECONDS = 24 * 60 * 60;
+// A request still running holds the key only briefly, so if the server stops halfway the
+// customer can retry a minute later instead of being blocked for a whole day.
+const PROCESSING_TTL_SECONDS = 60;
 const KEY_PATTERN = /^[A-Za-z0-9_-]{1,100}$/;
 
 const fingerprintOf = (body) =>
@@ -26,7 +29,7 @@ const idempotency = (scope) => async (req, res, next) => {
   const reserved = await redis.set(
     redisKey,
     JSON.stringify({ state: "processing", fingerprint }),
-    { NX: true, EX: TTL_SECONDS },
+    { NX: true, EX: PROCESSING_TTL_SECONDS },
   );
 
   if (reserved === null) {
